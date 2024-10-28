@@ -3,7 +3,7 @@ The Chrome Developer Tools can be used as a versatile tool for web development. 
 
 The Chrome local override feature can be used to create a web server to serve static web pages. And name can be used as the domain name of the web server. Even if the domain name already exists, Chrome will serve pages from the local web server if the requested page or resource exists.
 
-# Developing the device's Web interface
+## Developing the device's Web interface
 1. Load the Chrome and open Developer Tools window by pressing F12.
 2. Click "Sources" tab and then select "Overrides" sub-tab on the left navigation panel.
 3. Click "+ Select folder for overrides".
@@ -17,7 +17,7 @@ The Chrome local override feature can be used to create a web server to serve st
 11. Click "Refresh" button in the browser.
 12. The modified device's web page should appear.
 
-# WebSocket server
+## WebSocket server
 1. Install the [Node.js](https://nodejs.org).
 2. Open the command line shell.
 3. Navigate to the "[ws_server](../utils/ws_server/)" folder.
@@ -25,7 +25,7 @@ The Chrome local override feature can be used to create a web server to serve st
 5. Run the WebSocket server - enter "**node main.js**" to the command line.
 6. Now the WebSocket server can be used together with the Chrome local Web server to debug the communication between the web page and the WebSocket server.
 
-# Updating the Web interface on the device
+## Updating the Web interface on the device
 1. Run the [makefsdata.py](../main/http/server/fsdata/makefsdata.py) script to regenerate the C source file with the web content.
 2. Rebuild the C project and reflash it to the device.
 3. Wait till device is connected to the WiFi router.

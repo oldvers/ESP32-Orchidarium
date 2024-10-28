@@ -1,4 +1,4 @@
-# Web Aqua Light Project
+# Orchidarium Project
 
 ## Requirements
 1. [Python 3.x](https://www.python.org)
