@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "esp_spi_flash.h": "c",
+        "spi_flash.h": "c"
+    }
+    //"cmake.cmakePath":"${env:CMAKE_PATH}\\cmake.exe",
+    //"python.venvPath":"${env:IDF_PYTHON_ENV_PATH}"
+}

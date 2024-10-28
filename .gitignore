@@ -1,0 +1,8 @@
+# ESP project files
+build
+sdkconfig.old
+utils/parameters.bat
+utils/paths-win-tools.bat
+
+# VS Code files
+*.VC.DB*
