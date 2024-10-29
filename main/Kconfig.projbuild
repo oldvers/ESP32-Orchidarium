@@ -34,4 +34,12 @@ menu "Orchidarium Configuration"
             GPIO number (IOxx) to control the Fito LED strip.
             Some GPIOs are used for other purposes (flash connections, etc.) and cannot be used for RGB LED strip.
 
+    config FAN_GPIO
+        int "FAN GPIO number"
+        range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+        default 18
+        help
+            GPIO number (IOxx) to control the FAN.
+            Some GPIOs are used for other purposes (flash connections, etc.) and cannot be used for RGB LED strip.
+
 endmenu

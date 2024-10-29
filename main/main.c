@@ -5,6 +5,7 @@
 
 #include "led_strip_rgb.h"
 #include "led_strip_uwf.h"
+#include "fan.h"
 
 //-------------------------------------------------------------------------------------------------
 
@@ -66,6 +67,14 @@ void app_main(void)
         LED_Strip_F_SetBrightness(6 * step);
         vTaskDelay(30 / portTICK_PERIOD_MS);
     }
+
+    FAN_Init();
+    FAN_SetSpeed(UINT8_MAX);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    FAN_SetSpeed(0);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    FAN_SetSpeed(111);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
 
     while (1) {};
 }
