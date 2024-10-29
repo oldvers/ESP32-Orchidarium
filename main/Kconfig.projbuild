@@ -50,4 +50,36 @@ menu "Orchidarium Configuration"
             GPIO number (IOxx) to control the FAN.
             Some GPIOs are used for other purposes (flash connections, etc.) and cannot be used for RGB LED strip.
 
+    config HUMIDIFIER_POWER_GPIO
+        int "Humidifier power GPIO number"
+        range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+        default 5
+        help
+            GPIO number (IOxx) to control the power of Humidifier.
+            Some GPIOs are used for other purposes (flash connections, etc.) and cannot be used for RGB LED strip.
+
+    config HUMIDIFIER_BUTTON_GPIO
+        int "Humidifier control button GPIO number"
+        range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+        default 17
+        help
+            GPIO number (IOxx) to turn the Humidifier on/off.
+            Some GPIOs are used for other purposes (flash connections, etc.) and cannot be used for RGB LED strip.
+
+    config SENSORS_I2C_SCL_GPIO
+        int "Sensors I2C SCL GPIO number"
+        range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+        default 22
+        help
+            GPIO number (IOxx) to communicate with the sensors.
+            Some GPIOs are used for other purposes (flash connections, etc.) and cannot be used for RGB LED strip.
+
+    config SENSORS_I2C_SDA_GPIO
+        int "Sensors I2C SDA GPIO number"
+        range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+        default 21
+        help
+            GPIO number (IOxx) to communicate with the sensors.
+            Some GPIOs are used for other purposes (flash connections, etc.) and cannot be used for RGB LED strip.
+
 endmenu

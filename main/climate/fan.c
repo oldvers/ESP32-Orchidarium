@@ -150,7 +150,7 @@ void FAN_Test(void)
     FAN_SetSpeed(FAN_SPEED_HIGH);
     vTaskDelay(pdMS_TO_TICKS(5000));
     FAN_SetSpeed(FAN_SPEED_LOW);
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    vTaskDelay(pdMS_TO_TICKS(10000));
     FAN_SetSpeed(FAN_SPEED_NONE);
     vTaskDelay(pdMS_TO_TICKS(300));
 }

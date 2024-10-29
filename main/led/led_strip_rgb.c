@@ -54,12 +54,12 @@ void LED_Strip_RGB_Init(uint8_t * leds, uint16_t count)
     led_strip_clear(gLedStrip);
 
     /* Init the power pin */
-    gpio_config_t drv_en_config =
+    gpio_config_t pwr_gpio_config =
     {
         .mode = GPIO_MODE_OUTPUT,
         .pin_bit_mask = (1ULL << CONFIG_LED_STRIP_RGB_POWER_GPIO),
     };
-    ESP_ERROR_CHECK(gpio_config(&drv_en_config));
+    ESP_ERROR_CHECK(gpio_config(&pwr_gpio_config));
     gpio_set_level(CONFIG_LED_STRIP_RGB_POWER_GPIO, 0);
 }
 
