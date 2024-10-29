@@ -4,5 +4,11 @@ sdkconfig.old
 utils/parameters.bat
 utils/paths-win-tools.bat
 
+# Lock files for examples and components
+dependencies.lock
+
+# Managed_components for examples
+managed_components
+
 # VS Code files
-*.VC.DB*
+*.VC.*DB*
