@@ -16,5 +16,6 @@ void    LED_Strip_W_SetBrightness(uint8_t value);
 uint8_t LED_Strip_W_GetBrightness(void);
 void    LED_Strip_F_SetBrightness(uint8_t value);
 uint8_t LED_Strip_F_GetBrightness(void);
+void    LED_Strip_UWF_Test(void);
 
 #endif /* __LED_STRIP_UWF_H__ */

@@ -24,57 +24,14 @@ static const char * gTAG = "MAIN";
 
 //-------------------------------------------------------------------------------------------------
 
-static uint8_t gLeds[3 * 16] = {0};
-
-//-------------------------------------------------------------------------------------------------
-
 void app_main(void)
 {
-    led_color_t color = {{255, 0, 0, 0}};
-    uint8_t step = 0;
-
     MAIN_LOGI("*");
     MAIN_LOGI("--- Application Started ----------------------------------------");
 
-    LED_Strip_RGB_Init(gLeds, sizeof(gLeds));
-
-    LED_Strip_RGB_SetPixelColor(0, &color);
-    LED_Strip_RGB_Update();
-
-    for (step = 0; step < 35; step++)
-    {
-        vTaskDelay(50 / portTICK_PERIOD_MS);
-        LED_Strip_RGB_Rotate(true);
-        LED_Strip_RGB_Update();
-    }
-
-    LED_Strip_UWF_Init();
-
-    LED_Strip_U_SetBrightness(UINT8_MAX);
-    LED_Strip_W_SetBrightness(UINT8_MAX);
-    LED_Strip_F_SetBrightness(UINT8_MAX);
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-
-    LED_Strip_U_SetBrightness(0);
-    LED_Strip_W_SetBrightness(0);
-    LED_Strip_F_SetBrightness(0);
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-
-    for (step = 0; step < 40; step++)
-    {
-        LED_Strip_U_SetBrightness(6 * step);
-        LED_Strip_W_SetBrightness(6 * step);
-        LED_Strip_F_SetBrightness(6 * step);
-        vTaskDelay(30 / portTICK_PERIOD_MS);
-    }
-
-    FAN_Init();
-    FAN_SetSpeed(UINT8_MAX);
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-    FAN_SetSpeed(0);
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-    FAN_SetSpeed(111);
-    vTaskDelay(100 / portTICK_PERIOD_MS);
+    LED_Strip_RGB_Test();
+    LED_Strip_UWF_Test();
+    FAN_Test();
 
     while (1) {};
 }

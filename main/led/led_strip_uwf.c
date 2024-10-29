@@ -1,5 +1,8 @@
 #include "driver/mcpwm_prelude.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
 #include "led_strip_uwf.h"
 
 //-------------------------------------------------------------------------------------------------
@@ -25,8 +28,8 @@ enum
 //-------------------------------------------------------------------------------------------------
 
 static mcpwm_cmpr_handle_t gComparators[IDX_LED_STRIP_MAX] = {0};
-static mcpwm_gen_handle_t  gGenerators[IDX_LED_STRIP_MAX] = {0};
-static uint8_t             gBrightness[IDX_LED_STRIP_MAX] = {0};
+static mcpwm_gen_handle_t  gGenerators[IDX_LED_STRIP_MAX]  = {0};
+static uint8_t             gBrightness[IDX_LED_STRIP_MAX]  = {0};
 
 //-------------------------------------------------------------------------------------------------
 
@@ -200,6 +203,52 @@ void LED_Strip_F_SetBrightness(uint8_t value)
 uint8_t LED_Strip_F_GetBrightness(void)
 {
     return gBrightness[IDX_LED_STRIP_F];
+}
+
+//-------------------------------------------------------------------------------------------------
+
+void LED_Strip_UWF_Test(void)
+{
+    enum
+    {
+        STEPS_COUNT = 43,
+        STEP = 6,
+        DELAY = 30,
+    };
+    uint8_t i = 0;
+
+    LED_Strip_UWF_Init();
+
+    for (i = 0; i < STEPS_COUNT; i++)
+    {
+        LED_Strip_U_SetBrightness(i * STEP);
+        vTaskDelay(pdMS_TO_TICKS(DELAY));
+    }
+    for (i = STEPS_COUNT; i > 0; i--)
+    {
+        LED_Strip_U_SetBrightness((i - 1) * STEP);
+        vTaskDelay(pdMS_TO_TICKS(DELAY));
+    }
+    for (i = 0; i < STEPS_COUNT; i++)
+    {
+        LED_Strip_W_SetBrightness(i * STEP);
+        vTaskDelay(pdMS_TO_TICKS(DELAY));
+    }
+    for (i = STEPS_COUNT; i > 0; i--)
+    {
+        LED_Strip_W_SetBrightness((i - 1) * STEP);
+        vTaskDelay(pdMS_TO_TICKS(DELAY));
+    }
+    for (i = 0; i < STEPS_COUNT; i++)
+    {
+        LED_Strip_F_SetBrightness(i * STEP);
+        vTaskDelay(pdMS_TO_TICKS(DELAY));
+    }
+    for (i = STEPS_COUNT; i > 0; i--)
+    {
+        LED_Strip_F_SetBrightness((i - 1) * STEP);
+        vTaskDelay(pdMS_TO_TICKS(DELAY));
+    }
 }
 
 //-------------------------------------------------------------------------------------------------

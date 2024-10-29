@@ -1,6 +1,9 @@
 #include "driver/mcpwm_prelude.h"
 
-#include "led_strip_uwf.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+#include "fan.h"
 
 //-------------------------------------------------------------------------------------------------
 
@@ -131,6 +134,25 @@ void FAN_SetSpeed(uint8_t value)
 uint8_t FAN_GetSpeed(void)
 {
     return gSpeed;
+}
+
+//-------------------------------------------------------------------------------------------------
+
+void FAN_Test(void)
+{
+    FAN_Init();
+    FAN_SetSpeed(FAN_SPEED_FULL);
+    vTaskDelay(pdMS_TO_TICKS(5000));
+    FAN_SetSpeed(FAN_SPEED_NONE);
+    vTaskDelay(pdMS_TO_TICKS(5000));
+    FAN_SetSpeed(FAN_SPEED_MEDIUM);
+    vTaskDelay(pdMS_TO_TICKS(5000));
+    FAN_SetSpeed(FAN_SPEED_HIGH);
+    vTaskDelay(pdMS_TO_TICKS(5000));
+    FAN_SetSpeed(FAN_SPEED_LOW);
+    vTaskDelay(pdMS_TO_TICKS(5000));
+    FAN_SetSpeed(FAN_SPEED_NONE);
+    vTaskDelay(pdMS_TO_TICKS(300));
 }
 
 //-------------------------------------------------------------------------------------------------

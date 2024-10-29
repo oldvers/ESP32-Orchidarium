@@ -1,12 +1,16 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
 #include "driver/gpio.h"
-#include "esp_log.h"
 #include "sdkconfig.h"
 #include "led_strip.h"
 
 #include "led_strip_rgb.h"
+
+//-------------------------------------------------------------------------------------------------
 
 static led_strip_handle_t gLedStrip  = {0};
 static uint8_t *          gLeds      = NULL;
@@ -48,6 +52,15 @@ void LED_Strip_RGB_Init(uint8_t * leds, uint16_t count)
 
     /* Set all LED off to clear all pixels */
     led_strip_clear(gLedStrip);
+
+    /* Init the power pin */
+    gpio_config_t drv_en_config =
+    {
+        .mode = GPIO_MODE_OUTPUT,
+        .pin_bit_mask = (1ULL << CONFIG_LED_STRIP_RGB_POWER_GPIO),
+    };
+    ESP_ERROR_CHECK(gpio_config(&drv_en_config));
+    gpio_set_level(CONFIG_LED_STRIP_RGB_POWER_GPIO, 0);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -138,6 +151,71 @@ void LED_Strip_RGB_GetAverageColor(led_color_t * p_color)
     p_color->r = (uint8_t)(r / pos);
     p_color->g = (uint8_t)(g / pos);
     p_color->b = (uint8_t)(b / pos);
+}
+
+//-------------------------------------------------------------------------------------------------
+
+void LED_Strip_RGB_PowerOn(void)
+{
+    gpio_set_level(CONFIG_LED_STRIP_RGB_POWER_GPIO, 1);
+}
+
+//-------------------------------------------------------------------------------------------------
+
+void LED_Strip_RGB_PowerOff(void)
+{
+    gpio_set_level(CONFIG_LED_STRIP_RGB_POWER_GPIO, 0);
+}
+
+//-------------------------------------------------------------------------------------------------
+
+void LED_Strip_RGB_Test(void)
+{
+    enum
+    {
+        LEDS_COUNT = 18,
+        DELAY = 50,
+    };
+    uint8_t     gLeds[3 * LEDS_COUNT] = {0};
+    led_color_t color                 = {0};
+    uint8_t     i                     = 0;
+
+    LED_Strip_RGB_Init(gLeds, sizeof(gLeds));
+
+    LED_Strip_RGB_PowerOn();
+    vTaskDelay(pdMS_TO_TICKS(DELAY));
+    LED_Strip_RGB_Clear();
+    LED_Strip_RGB_Update();
+    for (i = 0; i < LEDS_COUNT; i++)
+    {
+        color.r = 128;
+        color.g = 0;
+        color.b = 0;
+        LED_Strip_RGB_SetPixelColor(i, &color);
+        LED_Strip_RGB_Update();
+        vTaskDelay(pdMS_TO_TICKS(DELAY));
+    }
+    for (i = LEDS_COUNT; i > 0; i--)
+    {
+        color.r = 0;
+        color.g = 128;
+        color.b = 0;
+        LED_Strip_RGB_SetPixelColor((i - 1), &color);
+        LED_Strip_RGB_Update();
+        vTaskDelay(pdMS_TO_TICKS(DELAY));
+    }
+    for (i = 0; i < LEDS_COUNT; i++)
+    {
+        color.r = 0;
+        color.g = 0;
+        color.b = 128;
+        LED_Strip_RGB_SetPixelColor(i, &color);
+        LED_Strip_RGB_Update();
+        vTaskDelay(pdMS_TO_TICKS(DELAY));
+    }
+    LED_Strip_RGB_Clear();
+    LED_Strip_RGB_Update();
+    LED_Strip_RGB_PowerOff();
 }
 
 //-------------------------------------------------------------------------------------------------

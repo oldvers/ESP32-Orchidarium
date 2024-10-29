@@ -23,5 +23,8 @@ void LED_Strip_RGB_Rotate(bool direction);
 void LED_Strip_RGB_Clear(void);
 void LED_Strip_RGB_SetColor(led_color_t * p_color);
 void LED_Strip_RGB_GetAverageColor(led_color_t * p_color);
+void LED_Strip_RGB_PowerOn(void);
+void LED_Strip_RGB_PowerOff(void);
+void LED_Strip_RGB_Test(void);
 
 #endif /* __LED_STRIP_RGB_H__ */
