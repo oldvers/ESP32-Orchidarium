@@ -4,6 +4,7 @@
 #include "esp_log.h"
 
 #include "led_strip_rgb.h"
+#include "led_strip_uwf.h"
 
 //-------------------------------------------------------------------------------------------------
 
@@ -29,6 +30,7 @@ static uint8_t gLeds[3 * 16] = {0};
 void app_main(void)
 {
     led_color_t color = {{255, 0, 0, 0}};
+    uint8_t step = 0;
 
     MAIN_LOGI("*");
     MAIN_LOGI("--- Application Started ----------------------------------------");
@@ -38,12 +40,34 @@ void app_main(void)
     LED_Strip_RGB_SetPixelColor(0, &color);
     LED_Strip_RGB_Update();
 
-    while (1)
+    for (step = 0; step < 35; step++)
     {
         vTaskDelay(50 / portTICK_PERIOD_MS);
         LED_Strip_RGB_Rotate(true);
         LED_Strip_RGB_Update();
     }
+
+    LED_Strip_UWF_Init();
+
+    LED_Strip_U_SetBrightness(UINT8_MAX);
+    LED_Strip_W_SetBrightness(UINT8_MAX);
+    LED_Strip_F_SetBrightness(UINT8_MAX);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+
+    LED_Strip_U_SetBrightness(0);
+    LED_Strip_W_SetBrightness(0);
+    LED_Strip_F_SetBrightness(0);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+
+    for (step = 0; step < 40; step++)
+    {
+        LED_Strip_U_SetBrightness(6 * step);
+        LED_Strip_W_SetBrightness(6 * step);
+        LED_Strip_F_SetBrightness(6 * step);
+        vTaskDelay(30 / portTICK_PERIOD_MS);
+    }
+
+    while (1) {};
 }
 
 //-------------------------------------------------------------------------------------------------

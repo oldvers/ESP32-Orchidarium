@@ -10,4 +10,28 @@ menu "Orchidarium Configuration"
             GPIO number (IOxx) to control the RGB LED strip.
             Some GPIOs are used for other purposes (flash connections, etc.) and cannot be used for RGB LED strip.
 
+    config LED_STRIP_U_GPIO
+        int "UV LED strip GPIO number"
+        range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+        default 26
+        help
+            GPIO number (IOxx) to control the UltraViolet LED strip.
+            Some GPIOs are used for other purposes (flash connections, etc.) and cannot be used for RGB LED strip.
+
+    config LED_STRIP_W_GPIO
+        int "White LED strip GPIO number"
+        range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+        default 23
+        help
+            GPIO number (IOxx) to control the White LED strip.
+            Some GPIOs are used for other purposes (flash connections, etc.) and cannot be used for RGB LED strip.
+
+    config LED_STRIP_F_GPIO
+        int "Fito LED strip GPIO number"
+        range ENV_GPIO_RANGE_MIN ENV_GPIO_OUT_RANGE_MAX
+        default 19
+        help
+            GPIO number (IOxx) to control the Fito LED strip.
+            Some GPIOs are used for other purposes (flash connections, etc.) and cannot be used for RGB LED strip.
+
 endmenu
