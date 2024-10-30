@@ -7,6 +7,7 @@
 #include "led_strip_uwf.h"
 #include "fan.h"
 #include "humidifier.h"
+#include "i2c.h"
 
 //-------------------------------------------------------------------------------------------------
 
@@ -34,6 +35,7 @@ void app_main(void)
     LED_Strip_UWF_Test();
     FAN_Test();
     Humidifier_Test();
+    I2C_Test();
 
     while (1) {};
 }
