@@ -3,7 +3,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 
-#include "led_strip_rgb.h"
+#include "led_task.h"
 #include "led_strip_uwf.h"
 #include "fan.h"
 #include "humidifier.h"
@@ -31,7 +31,8 @@ void app_main(void)
     MAIN_LOGI("*");
     MAIN_LOGI("--- Application Started ----------------------------------------");
 
-    LED_Strip_RGB_Test();
+    LED_Task_Init();
+    LED_Task_Test();
     LED_Strip_UWF_Test();
     FAN_Test();
     Humidifier_Test();

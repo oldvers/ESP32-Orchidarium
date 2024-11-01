@@ -8,6 +8,7 @@ set( srcs
      "main.c"
      "led/led_strip_rgb.c"
      "led/led_strip_uwf.c"
+     "led/led_task.c"
      "climate/fan.c"
      "climate/humidifier.c"
      "utils/i2c.c" )
