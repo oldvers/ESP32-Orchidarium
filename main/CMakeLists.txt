@@ -2,7 +2,8 @@ set( incs
      "."
      "led/include"
      "climate/include"
-     "utils/include" )
+     "utils/include"
+     "udp/include" )
 
 set( srcs 
      "main.c"
@@ -11,7 +12,8 @@ set( srcs
      "led/led_task.c"
      "climate/fan.c"
      "climate/humidifier.c"
-     "utils/i2c.c" )
+     "utils/i2c.c"
+     "udp/udp_dns_server.c" )
 
 idf_component_register( SRCS "${srcs}"
                         INCLUDE_DIRS "${incs}" )

@@ -8,6 +8,7 @@
 #include "fan.h"
 #include "humidifier.h"
 #include "i2c.h"
+#include "udp_dns_server.h"
 
 //-------------------------------------------------------------------------------------------------
 
@@ -32,6 +33,8 @@ void app_main(void)
     MAIN_LOGI("--- Application Started ----------------------------------------");
 
     LED_Task_Init();
+    UDP_DNS_Task_Init();
+
     LED_Task_Test();
     LED_Strip_UWF_Test();
     FAN_Test();

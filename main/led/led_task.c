@@ -57,7 +57,7 @@ typedef struct
 
 #define LED_TASK_TICK_MS (10)
 
-#define LED_TASK_LOG 1
+#define LED_TASK_LOG  0
 
 #if (1 == LED_TASK_LOG)
 static const char * gTAG = "LED";
