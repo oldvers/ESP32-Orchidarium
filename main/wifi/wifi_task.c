@@ -627,7 +627,7 @@ static void wifi_CheckIfRestartNeeded(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void wifi_Task(void * pvParams)
+static void vWiFi_Task(void * pvParams)
 {
     wifi_Start();
 
@@ -737,7 +737,7 @@ void WiFi_Task_Init(void)
     /* Create the events group for WiFi task */
     gWiFiEvents = xEventGroupCreate();
 
-    xTaskCreate(wifi_Task, "WiFi", 6144, NULL, 5, NULL);
+    (void)xTaskCreatePinnedToCore(vWiFi_Task, "WiFi", 6144, NULL, 5, NULL, CORE0);
 }
 
 //-------------------------------------------------------------------------------------------------

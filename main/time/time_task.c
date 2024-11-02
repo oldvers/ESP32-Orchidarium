@@ -502,7 +502,7 @@ void Time_Task_Init(void)
     gTimeQueue = xQueueCreate(20, sizeof(time_message_t));
 
     /* SNTP service uses LwIP, large stack space should be allocated  */
-    xTaskCreate(vTime_Task, "TIME", 4096, NULL, 5, NULL);
+    (void)xTaskCreatePinnedToCore(vTime_Task, "TIME", 4096, NULL, 5, NULL, CORE0);
 
     Time_Task_SendMsg(&msg);
 }

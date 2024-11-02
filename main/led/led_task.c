@@ -707,7 +707,7 @@ static void led_Process(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_Task(void * pvParameters)
+static void vLED_Task(void * pvParameters)
 {
     enum
     {
@@ -749,7 +749,7 @@ void LED_Task_Init(void)
 {
     gLedQueue = xQueueCreate(20, sizeof(led_message_t));
 
-    (void)xTaskCreate(led_Task, "LED_Task", 4096, NULL, 10, NULL);
+    (void)xTaskCreatePinnedToCore(vLED_Task, "LED", 4096, NULL, 10, NULL, CORE1);
 }
 
 //-------------------------------------------------------------------------------------------------

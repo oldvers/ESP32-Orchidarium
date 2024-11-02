@@ -341,7 +341,16 @@ static void websocket_open_cb(struct tcp_pcb * pcb, const char * uri)
     if (!strcmp(uri, "/stream"))
     {
         HTTPS_LOGI("Request for streaming");
-        xTaskCreate(&vWebSocket_Task, "WebSocket Task", 1024, (void *)pcb, 2, NULL);
+        (void)xTaskCreatePinnedToCore
+        (
+            vWebSocket_Task,
+            "WebSocket",
+            4096,
+            (void *)pcb,
+            2,
+            NULL,
+            CORE0
+        );
     }
 }
 
@@ -394,7 +403,7 @@ void HTTP_Server_Init(bool config)
     HTTPS_LOGI("HTTP Config = %d", gConfig);
 
     /* Initialize task */
-    xTaskCreate(&vHTTP_Server_Task, "HTTP Server", 6144, NULL, 2, NULL);
+    (void)xTaskCreatePinnedToCore(vHTTP_Server_Task, "HTTP Server", 6144, NULL, 2, NULL, CORE0);
 }
 
 //-------------------------------------------------------------------------------------------------

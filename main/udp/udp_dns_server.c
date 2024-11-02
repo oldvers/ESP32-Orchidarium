@@ -533,7 +533,7 @@ void UDP_DNS_Task_Init(void)
     /* Create the events group for UDP task */
     gDnsEvents = xEventGroupCreate();
 
-    xTaskCreate(vDNS_Task, "DNS", 6144, NULL, 5, NULL);
+    (void)xTaskCreatePinnedToCore(vDNS_Task, "DNS", 6144, NULL, 5, NULL, CORE0);
 }
 
 //-------------------------------------------------------------------------------------------------
