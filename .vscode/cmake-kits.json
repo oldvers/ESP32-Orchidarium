@@ -1,0 +1,11 @@
+[
+    {
+        "name": "xTensa Kit",
+        "isTrusted": true,
+        "keep": true,
+        "compilers": {
+            "C": "${env:IDF_TOOLS_PATH}/tools/xtensa-esp-elf/esp-14.2.0_20240906/xtensa-esp-elf/bin/xtensa-esp32-elf-gcc.exe",
+            "CXX": "${env:IDF_TOOLS_PATH}/tools/xtensa-esp-elf/esp-14.2.0_20240906/xtensa-esp-elf/bin/xtensa-esp32-elf-g++.exe"
+        }
+    }
+]

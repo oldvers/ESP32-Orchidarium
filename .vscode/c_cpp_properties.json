@@ -1,15 +1,14 @@
 {
     "configurations": [
         {
-            "name": "ESP-IDF",
+            "name": "ESP32-Orchidarium",
             "compilerPath": "${env:IDF_TOOLS_PATH}/tools/xtensa-esp-elf/esp-14.2.0_20240906/xtensa-esp-elf/bin/xtensa-esp32-elf-gcc.exe",
             "cStandard": "c11",
             "cppStandard": "c++17",
             "intelliSenseMode": "windows-gcc-x64",
-            "compileCommands": "${workspaceRoot}/build/compile_commands.json",
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json",
             "configurationProvider": "ms-vscode.cmake-tools",
             "includePath": [
-                "${workspaceRoot}/build/**",
                 "${env:IDF_PATH}/components/**",
                 "${env:IDF_TOOLS_PATH}/tools/xtensa-esp-elf/esp-14.2.0_20240906/xtensa-esp-elf/xtensa-esp-elf/include/**",
                 "${env:IDF_TOOLS_PATH}/tools/xtensa-esp-elf/esp-14.2.0_20240906/xtensa-esp-elf/lib/gcc/xtensa-esp-elf/14.2.0/include/**",
@@ -18,7 +17,6 @@
             ],
             "browse": {
                 "path": [
-                    "${workspaceRoot}/build/**",
                     "${env:IDF_PATH}/components/**",
                     "${env:IDF_TOOLS_PATH}/tools/xtensa-esp-elf/esp-14.2.0_20240906/xtensa-esp-elf/xtensa-esp-elf/include/**",
                     "${env:IDF_TOOLS_PATH}/tools/xtensa-esp-elf/esp-14.2.0_20240906/xtensa-esp-elf/lib/gcc/xtensa-esp-elf/14.2.0/include/**",
@@ -26,7 +24,7 @@
                     "${workspaceFolder}"
                 ],
                 "limitSymbolsToIncludedHeaders": false,
-                "databaseFilename": "${workspaceRoot}/.vscode/browse.vc.db"
+                "databaseFilename": "${workspaceFolder}/.vscode/browse.vc.db"
             }
         }
     ],
