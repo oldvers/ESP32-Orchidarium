@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no">
+        <link rel="stylesheet" type="text/css" href="css/common.css">
+		<link rel="stylesheet" type="text/css" href="css/siimple.min.ice.css">
+		<link rel="stylesheet" type="text/css" href="css/style.css">
+		<link rel="shortcut icon" href="img/favicon.png">
+		<title>WebAquaLight Config</title>
+	</head>
+	<body>
+
+    <div class="container has-pt-4 has-pb-4 has-pl-0 has-pr-0">
+        <div class="has-w-auto has-pl-0 has-pr-0 has-ml-auto has-mr-auto">
+            <div class="card is-shadowed">
+				<div id="status_box" class="alert is-secondary">Starting...</div>
+                <h4>Connection parameters</h4>
+                <div class="has-mb-4">
+                    <label class="label">WiFi SSID (Router Name)</label>
+                    <input id="ssid" class="input" type="text" minlength="5" maxlength="32" placeholder="HomeWLAN" />
+                </div>
+                <div class="has-mb-4">
+                    <label class="label">WiFi Password</label>
+                    <input id="pwd" class="input" type="text" minlength="8" maxlength="32" placeholder="Password" />
+                </div>
+                <div class="has-mb-6">
+                    <label class="label">Site Name</label>
+                    <input id="site" class="input" type="text" minlength="5" maxlength="32" placeholder="WebAquaLight" />
+                </div>
+                <button class="button is-full" onclick="onSaveBtnClick()">
+                    <i class="si-lock has-pr-1"></i>
+                    <span>Save</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+	<script>
+		var ws;
+		var retries;
+		//var series = new TimeSeries();
+        //var colorPicker = new iro.ColorPicker('#picker');
+
+		
+		window.onload = onWindowLoad;
+
+		function onWindowLoad()
+		{
+			console.log("Window loaded");
+		    wsOpen();
+			//startPolling();
+			//setStatusBox("info", "Opening WebSocket..");
+		}
+		
+		function updateStatusBox(cls, text)
+		{
+			sbox = document.getElementById('status_box');
+			sbox.className = "alert is-" + cls;
+			sbox.innerHTML = text;
+			console.log(text);
+		}
+
+		function onMessageFromServer(evt)
+		{
+			//retries = 0;
+			let view    = new Uint8Array(evt.data);
+			let command = view[0];
+			let status  = view[1];
+
+			console.log("Message from server: " + view);
+
+			if ((0x01 == command) && (0x00 == status))
+			{
+				console.log("Configuration received!");
+
+				let offset = 2;
+				let ssid = getStrFromBuffer(view, offset);
+				offset += ssid.length;
+				let pwd = getStrFromBuffer(view, offset);
+				offset += pwd.length;
+				let site = getStrFromBuffer(view, offset);
+
+				console.log("Config: " + ssid.value + " " + pwd.value + " " + site.value);
+
+				document.getElementById('ssid').value = ssid.value;
+			    document.getElementById('pwd').value = pwd.value;
+			    document.getElementById('site').value = site.value;
+			}
+			else if ((0x02 == command) && (0x00 == status))
+			{
+				console.log("Configuration saved!");
+				window.location.href = "complete";
+			}
+			//if (val == 0xBEEF || val == 0xDEAD)
+			//	console.log("LED switched");
+			//else
+			//	series.append(new Date().getTime(), val);
+		}
+		
+		//function wsOpenStream()
+		//{
+		//	var uri = "/stream"
+		//	var ws = new WebSocket("ws://localhost:8080"); // + location.host + uri);
+		//		ws.onmessage = function(evt) {
+		//			console.log(evt.data);
+		//			var stats = JSON.parse(evt.data);
+		//			console.log(stats);
+		//			document.getElementById('uptime').innerHTML = stats.uptime + ' seconds';
+		//			document.getElementById('heap').innerHTML = stats.heap + ' bytes';
+		//			document.getElementById('led').innerHTML = (stats.led == 1) ? 'On' : 'Off';
+		//		};
+		//	}
+		
+		function wsOpen()
+		{
+			if (ws === undefined || ws.readyState != 0)
+			{
+				if (retries)
+				{
+					updateStatusBox("danger", "Timeout!");
+				}
+				else
+				{
+					updateStatusBox("secondary", "Connecting...");
+				}
+				console.log(location.host);
+				ws = new WebSocket("ws://" + location.host);
+				ws.binaryType = 'arraybuffer';
+				ws.onopen = function(evt) { onConnectedToServer(evt); };
+				ws.onerror = function(evt) { updateStatusBox("danger", "Error!"); };
+				ws.onmessage = function(evt) { onMessageFromServer(evt); };
+				ws.onclose = function(evt) { updateStatusBox("warning", "Disconnected"); };
+				//wsOpenStream();
+				retries = 0;
+			}
+		}
+
+		function putStrInBuffer(view, offset, string)
+		{
+			let len = string.length;
+			let offs = offset;
+
+			view[offs++] = len;
+			for (let i = 0; i < len; i++, offs++)
+			{
+                view[offs] = string.charCodeAt(i);
+            }
+		}
+
+		function getStrFromBuffer(view, offset)
+		{
+		    let offs = offset;
+		    let len  = view[offs++];
+		    let str  = '';
+
+		    for (let i = 0; i < len; i++)
+		    {
+		        str += String.fromCharCode(view[offs++]);
+		    }
+
+		    return {value: str, length: (len + 1)};
+		}
+
+		function onSaveBtnClick()
+		{
+			let ssid = document.getElementById('ssid').value;
+			let pwd = document.getElementById('pwd').value;
+			let site = document.getElementById('site').value.toLowerCase();
+
+			if (ssid === "" || pwd === "" || site === "")
+			{
+				window.alert("All the parameters must have filled values!");
+			}
+			else
+			{
+                console.log("Save button clicked: " + ssid + " " + pwd + " " + site);
+				
+				let len = 4 + ssid.length + pwd.length + site.length;
+				let offset = 0;
+                let buffer = new ArrayBuffer(len);
+                let view = new Uint8Array(buffer);
+
+				view[offset] = 0x02;
+				offset += (1);
+				putStrInBuffer(view, offset, ssid);
+				offset += (ssid.length + 1);
+				putStrInBuffer(view, offset, pwd);
+				offset += (pwd.length + 1);
+				putStrInBuffer(view, offset, site);
+				
+				wsSendToServer(buffer);
+			}
+		}
+
+		function wsSendToServer(data)
+		{
+			if (ws.readyState == 3 || retries++ > 5)
+			{
+				wsOpen();
+			}
+			else if (ws.readyState == 1)
+			{
+				ws.send(data);
+			}
+		}
+
+		function onConnectedToServer(evt)
+		{
+			retries = 0;
+			updateStatusBox("success", "Connected");
+
+			console.log("Try to get the configuration...");
+				
+            let buffer = new ArrayBuffer(1);
+            let view = new Uint8Array(buffer);
+
+			view[0] = 0x01;
+			wsSendToServer(buffer);
+		}
+
+			function startPolling() {
+				var chart = new SmoothieChart({millisPerPixel:11,grid:{fillStyle:'#ffffff',strokeStyle:'#ffffff',borderVisible:false},
+					labels:{fillStyle:'#000000'},maxValue:1024,minValue:0});
+				chart.addTimeSeries(series, {lineWidth:2,strokeStyle:'#03a9f4',fillStyle:'#f1f5fa'});
+				chart.streamTo(document.getElementById("chartCanvas"), 500);
+				setInterval(function() { wsWrite('A'); }, 500);
+			}
+
+			function gpio() {
+				if (document.getElementById('led-switch').checked)
+					wsWrite('E');
+				else
+					wsWrite('D');
+			}
+		</script>
+	</body>
+</html>

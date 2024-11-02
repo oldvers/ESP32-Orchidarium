@@ -56,7 +56,7 @@
 /* Maximum domain name octet length without zero terminated char for this server. */
 #define DNS_MAX_OCTET_LEN 60
 
-#define DNS_LOG  2
+#define DNS_LOG  0
 
 #if (1 == DNS_LOG)
 static const char * gTAG = "DNS";
@@ -533,7 +533,7 @@ void UDP_DNS_Task_Init(void)
     /* Create the events group for UDP task */
     gDnsEvents = xEventGroupCreate();
 
-    xTaskCreate(vDNS_Task, "DNS", 4096, NULL, 5, NULL);
+    xTaskCreate(vDNS_Task, "DNS", 6144, NULL, 5, NULL);
 }
 
 //-------------------------------------------------------------------------------------------------

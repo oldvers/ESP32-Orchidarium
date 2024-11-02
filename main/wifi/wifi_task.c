@@ -22,7 +22,7 @@
 #include "types.h"
 #include "wifi_task.h"
 #include "udp_dns_server.h"
-//--- #include "http_server.h"
+#include "http_server.h"
 #include "led_task.h"
 
 //-------------------------------------------------------------------------------------------------
@@ -732,12 +732,12 @@ void WiFi_Task_Init(void)
         gWiFiBoot = WIFI_BOOT_CONNECT_TO_AP;
     }
     WIFI_LOGI("Config = %d", (WIFI_BOOT_CONNECT_TO_AP != gWiFiBoot));
-//---    HTTP_Server_Init((WIFI_BOOT_CONNECT_TO_AP != gWiFiBoot));
+    HTTP_Server_Init((WIFI_BOOT_CONNECT_TO_AP != gWiFiBoot));
 
     /* Create the events group for WiFi task */
     gWiFiEvents = xEventGroupCreate();
 
-    xTaskCreate(wifi_Task, "WiFi", 4096, NULL, 5, NULL);
+    xTaskCreate(wifi_Task, "WiFi", 6144, NULL, 5, NULL);
 }
 
 //-------------------------------------------------------------------------------------------------
