@@ -9,12 +9,17 @@ const wsProtocol = { getConnectionParameters: 0x01,
                      setColor: 0x03,
                      setSunImitationMode: 0x04,
 					 getStatus: 0x05,
+                     setUltraViolet: 0x06,
+					 setWhite: 0x07,
+					 setFito: 0x08,
+					 setFAN: 0x09,
+					 setHumidifier: 0x0A,
                      success: 0x00,
                      on: 0x01,
                      off: 0x00,
                      modeSunImitation: 0,
                      modeColor: 1 };
-var color = {mode: wsProtocol.modeSunImitation, r: 255, g: 255, b: 255};
+var color = { mode: wsProtocol.modeSunImitation, r: 255, g: 255, b: 255 };
 				
 function getStrFromBuffer(view, offset)
 {
@@ -148,7 +153,7 @@ wss.on("connection", ws => {
 			let dts = dt.toUTCString() + '\0';
             console.log("Rx: Get status - " + dts);
             
-     		let len = 6 + dts.length;
+     		let len = 11 + dts.length;
 			let offset = 0;
             let buffer = new ArrayBuffer(len);
             let view = new Uint8Array(buffer);
@@ -165,11 +170,71 @@ wss.on("connection", ws => {
             offset += (1);
 			view[offset] = color.b; /* B */
             offset += (1);
+            view[offset] = 80; /* UV */
+            offset += (1);
+            view[offset] = 160; /* W */
+            offset += (1);
+            view[offset] = 240; /* Fito */
+            offset += (1);
+            view[offset] = 2; /* FAN */
+            offset += (1);
+            view[offset] = 1; /* Humidifier */
+            offset += (1);
 			putStrInBuffer(view, offset, dts);
 			
 			ws.send(buffer);
 		}
-        
+        else if (wsProtocol.setUltraViolet == view[0])
+        {
+            // Set UV
+            color.mode = wsProtocol.modeColor;
+            console.log("Rx: Set UV: " + view[1]);
+            let bytearray = new Uint8Array(2);
+            bytearray[0] = wsProtocol.setUltraViolet;
+            bytearray[1] = wsProtocol.success;
+            ws.send(bytearray.buffer);
+        }
+        else if (wsProtocol.setWhite == view[0])
+        {
+            // Set W
+            color.mode = wsProtocol.modeColor;
+            console.log("Rx: Set W: " + view[1]);
+            let bytearray = new Uint8Array(2);
+            bytearray[0] = wsProtocol.setWhite;
+            bytearray[1] = wsProtocol.success;
+            ws.send(bytearray.buffer);
+        }
+        else if (wsProtocol.setFito == view[0])
+        {
+            // Set Fito
+            color.mode = wsProtocol.modeColor;
+            console.log("Rx: Set Fito: " + view[1]);
+            let bytearray = new Uint8Array(2);
+            bytearray[0] = wsProtocol.setFito;
+            bytearray[1] = wsProtocol.success;
+            ws.send(bytearray.buffer);
+        }
+        else if (wsProtocol.setFAN == view[0])
+        {
+            // Set FAN
+            color.mode = wsProtocol.modeColor;
+            console.log("Rx: Set FAN: " + view[1]);
+            let bytearray = new Uint8Array(2);
+            bytearray[0] = wsProtocol.setFAN;
+            bytearray[1] = wsProtocol.success;
+            ws.send(bytearray.buffer);
+        }
+        else if (wsProtocol.setHumidifier == view[0])
+        {
+            // Set Humidifier
+            color.mode = wsProtocol.modeColor;
+            console.log("Rx: Set Humidifier: " + view[1]);
+            let bytearray = new Uint8Array(2);
+            bytearray[0] = wsProtocol.setHumidifier;
+            bytearray[1] = wsProtocol.success;
+            ws.send(bytearray.buffer);
+        }
+
         //var bytearray = new Uint8Array( 2 );
         ////for ( var i = 0; i < canvaspixellen; ++i ) {
         //var val = Math.floor(5 + Math.random() * 1014);

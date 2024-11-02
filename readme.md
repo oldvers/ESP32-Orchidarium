@@ -17,6 +17,19 @@
 2. To build/flash/monitor the project just run the appropriate task in VS Code.
 3. For more information the [ESP32 IDF help](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/get-started/index.html) can be used as a reference.
 
+## How to work with device
+1. At the first time the device will start as a WiFi access point with the name "WIFI-XXXXXXXXXXXX", where the "XXXXXXXXXXXX" is the serial number of the device. The device will indicate the periodic red color fade on the LED strip.
+2. Using the mobile phone or the PC connect to the access point "WIFI-XXXXXXXXXXXX", the password is "0123456789".
+3. The following web page should be opened in your web browser automatically. If it is not opened automatically try to open http://192.168.4.1 in your browser or click on the WiFi message in the tray.
+![Configuration](./docs/images/configuration.png)
+4. Enter the appropriate fields in the configuration form and click the "Save" button. The following web page with the next steps will be shown.
+![Configuration complete](./docs/images/configuration-complete.png)
+5. During connection to the router the periodic blue color fade will be indicated on the LED strip. After a successful connection to the router, the rotating rainbow will be indicated on the LED strip.
+6. After the device is connected to the router open the browser and enter the site name you entered in the configuration web page. The following web page will be shown and you can control the color and brightness of the LED strip. You can also enable the Sun imitation mode. In this mode, the device synchronizes the date/time via the Internet, calculates the sunrise/sundown times, and sets the color/brightness according to the Sun's position in the sky.
+![Orchidarium](./docs/images/orchidarium.png)
+
+7. For Android devices, the "mDNS Discovery" application can be used to discover the device in the network and avoid the knowledge of the exact device IP address. During the discovery process, the application will show the site name entered in the configuration web page.
+
 ## Resources
 - The HTTP server with WebSockets [article](https://lujji.github.io/blog/esp-httpd).
 - The captive portal [basics](https://en.wikipedia.org/wiki/Captive_portal).

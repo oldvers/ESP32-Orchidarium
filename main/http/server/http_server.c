@@ -16,6 +16,10 @@
 #include "led_task.h"
 #include "time_task.h"
 
+#include "led_strip_uwf.h"
+#include "fan.h"
+#include "humidifier.h"
+
 //-------------------------------------------------------------------------------------------------
 
 #define HTTPS_LOG  1
@@ -195,6 +199,11 @@ static void websocket_cb(struct tcp_pcb * pcb, uint8_t * data, uint16_t data_len
         CMD_SET_COLOR                 = 0x03,
         CMD_SET_SUN_IMITATION_MODE    = 0x04,
         CMD_GET_STATUS                = 0x05,
+        CMD_SET_ULTRAVIOLET           = 0x06,
+        CMD_SET_WHITE                 = 0x07,
+        CMD_SET_FITO                  = 0x08,
+        CMD_SET_FAN                   = 0x09,
+        CMD_SET_HUMIDIFIER            = 0x0A,
         SUCCESS                       = 0x00,
         ERROR                         = 0xFF,
         ON                            = 0x01,
@@ -299,14 +308,147 @@ static void websocket_cb(struct tcp_pcb * pcb, uint8_t * data, uint16_t data_len
                 response[2] = MODE_COLOR;
             }
             LED_Task_GetCurrentColor(&color);
-            response[3] = color.r;
-            response[4] = color.g;
-            response[5] = color.b;
+            response[3]  = color.r;
+            response[4]  = color.g;
+            response[5]  = color.b;
+            response[6]  = LED_Strip_U_GetBrightness();
+            response[7]  = LED_Strip_W_GetBrightness();
+            response[8]  = LED_Strip_F_GetBrightness();
+            response[9]  = 1; /* TODO: FAN_GetSpeed(); */
+            response[10] = 0; /* TODO: Get Humidifier On */
             time(&now);
             localtime_r(&now, &datetime);
-            offset = strftime((char *)&response[7], MAX_DATE_TIME_LEN, "%c", &datetime);
-            response[6] = offset;
-            len = (offset + 7);
+            offset = strftime((char *)&response[12], MAX_DATE_TIME_LEN, "%c", &datetime);
+            response[11] = offset;
+            len = (offset + 12);
+            break;
+        case CMD_SET_ULTRAVIOLET:
+            HTTPS_LOGI("The UV received: %d", data[1]);
+
+            /* TODO: led_message_t msg =
+            {
+                .command   = LED_CMD_INDICATE_COLOR,
+                .src_color = {.bytes = {0}},
+                .dst_color = {.r = data[1], .g = data[2], .b = data[3]},
+                .interval  = 0,
+                .duration  = 0
+            };
+            LED_Task_SendMsg(&msg); */
+            LED_Strip_U_SetBrightness(data[1]);
+
+            time_msg.command = TIME_CMD_SUN_DISABLE;
+            Time_Task_SendMsg(&time_msg);
+
+            response[0] = CMD_SET_ULTRAVIOLET;
+            response[1] = SUCCESS;
+            break;
+        case CMD_SET_WHITE:
+            HTTPS_LOGI("The W received: %d", data[1]);
+
+            /* TODO: led_message_t msg =
+            {
+                .command   = LED_CMD_INDICATE_COLOR,
+                .src_color = {.bytes = {0}},
+                .dst_color = {.r = data[1], .g = data[2], .b = data[3]},
+                .interval  = 0,
+                .duration  = 0
+            };
+            LED_Task_SendMsg(&msg); */
+            LED_Strip_W_SetBrightness(data[1]);
+
+            time_msg.command = TIME_CMD_SUN_DISABLE;
+            Time_Task_SendMsg(&time_msg);
+
+            response[0] = CMD_SET_WHITE;
+            response[1] = SUCCESS;
+            break;
+        case CMD_SET_FITO:
+            HTTPS_LOGI("The Fito received: %d", data[1]);
+
+            /* TODO: led_message_t msg =
+            {
+                .command   = LED_CMD_INDICATE_COLOR,
+                .src_color = {.bytes = {0}},
+                .dst_color = {.r = data[1], .g = data[2], .b = data[3]},
+                .interval  = 0,
+                .duration  = 0
+            };
+            LED_Task_SendMsg(&msg); */
+            LED_Strip_F_SetBrightness(data[1]);
+
+            time_msg.command = TIME_CMD_SUN_DISABLE;
+            Time_Task_SendMsg(&time_msg);
+
+            response[0] = CMD_SET_FITO;
+            response[1] = SUCCESS;
+            break;
+        case CMD_SET_FAN:
+            HTTPS_LOGI("The FAN received: %d", data[1]);
+
+            /* TODO: led_message_t msg =
+            {
+                .command   = LED_CMD_INDICATE_COLOR,
+                .src_color = {.bytes = {0}},
+                .dst_color = {.r = data[1], .g = data[2], .b = data[3]},
+                .interval  = 0,
+                .duration  = 0
+            };
+            LED_Task_SendMsg(&msg); */
+            switch (data[1])
+            {
+                case 0:
+                    FAN_SetSpeed(FAN_SPEED_NONE);
+                    break;
+                case 1:
+                    FAN_SetSpeed(FAN_SPEED_LOW);
+                    break;
+                case 2:
+                    FAN_SetSpeed(FAN_SPEED_MEDIUM);
+                    break;
+                case 3:
+                    FAN_SetSpeed(FAN_SPEED_HIGH);
+                    break;
+                case 4:
+                    FAN_SetSpeed(FAN_SPEED_FULL);
+                    break;
+                default:
+                    FAN_SetSpeed(FAN_SPEED_NONE);
+                    break;
+            }
+
+            time_msg.command = TIME_CMD_SUN_DISABLE;
+            Time_Task_SendMsg(&time_msg);
+
+            response[0] = CMD_SET_FAN;
+            response[1] = SUCCESS;
+            break;
+        case CMD_SET_HUMIDIFIER:
+            HTTPS_LOGI("The Humidifier received: %d", data[1]);
+
+            /* TODO: led_message_t msg =
+            {
+                .command   = LED_CMD_INDICATE_COLOR,
+                .src_color = {.bytes = {0}},
+                .dst_color = {.r = data[1], .g = data[2], .b = data[3]},
+                .interval  = 0,
+                .duration  = 0
+            };
+            LED_Task_SendMsg(&msg); */
+            if (0 == data[1])
+            {
+                Humidifier_PowerOff();
+            }
+            else
+            {
+                Humidifier_PowerOn();
+                Humidifier_OnOffButtonClick();
+            }
+
+            time_msg.command = TIME_CMD_SUN_DISABLE;
+            Time_Task_SendMsg(&time_msg);
+
+            response[0] = CMD_SET_HUMIDIFIER;
+            response[1] = SUCCESS;
             break;
         case 'A': // ADC
             /* This should be done on a separate thread in 'real' applications */
@@ -401,6 +543,11 @@ void HTTP_Server_Init(bool config)
 
     gConfig = config;
     HTTPS_LOGI("HTTP Config = %d", gConfig);
+
+    /* TODO: Remove */
+    LED_Strip_UWF_Init();
+    FAN_Init();
+    Humidifier_Init();
 
     /* Initialize task */
     (void)xTaskCreatePinnedToCore(vHTTP_Server_Task, "HTTP Server", 6144, NULL, 2, NULL, CORE0);

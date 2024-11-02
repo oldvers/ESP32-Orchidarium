@@ -701,7 +701,7 @@ void Humidifier_PowerOn(void)
 {
     enum
     {
-        POWER_ON_DELAY = 350,
+        POWER_ON_DELAY = 1300,
     };
     /* Power on the humidifier */
     gpio_set_level(CONFIG_HUMIDIFIER_POWER_GPIO, 1);

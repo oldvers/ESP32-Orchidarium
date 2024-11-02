@@ -55,7 +55,19 @@
             ]
         },
         {
-            "label": "Flash - Flash the device",
+            "label": "Build - Makefsdata",
+            "command": "python",
+            "type": "shell",
+            "args": [
+                "${env:CD_PATH}\\..\\main\\http\\server\\fsdata\\makefsdata.py"
+            ],
+            "group": "build",
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Flash - Program",
             "type": "shell",
             "command": "python",
             "args": [

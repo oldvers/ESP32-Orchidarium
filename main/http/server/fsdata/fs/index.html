@@ -7,7 +7,7 @@
 		<link rel="stylesheet" type="text/css" href="css/siimple.min.ice.css">
 		<link rel="stylesheet" type="text/css" href="css/style.css">
 		<link rel="shortcut icon" href="img/favicon.png">
-		<title>WebAquaLight</title>
+		<title>Orchidarium</title>
 	</head>
 	<body>
 
@@ -17,16 +17,43 @@
 				<div id="status_box" class="alert is-secondary">
 					<label id="status" class="has-w-full has-text-center">Starting...</label>
 				</div>
-                <div align="center">
+                <!--- --------- -->
+				<div align="center">
                     <label id="site" class="label is-block has-size-3">Web Aqua Light</label>
                 </div>
-				<div id="picker" align="center" class="has-pt-6 has-pb-6"></div>
-				<div class="card is-shadowed has-pt-4 has-pb-4 has-pl-0 has-pr-0 is-flex has-justify-center has-text-center has-items-center">
+				<!--- --------- -->
+				<div class="card is-shadowed has-pt-4 has-pb-4 has-pl-0 has-pr-0 has-mb-4 is-flex has-justify-center has-text-center has-items-center">
                     <div class="is-flex has-items-center">
 						<input type="checkbox" id="sun_switch" class="switch" onclick="onSunSwitchClick(this.checked);"/>
 					</div>
 					<div class="is-flex has-items-center">
 						<label class="label has-size-1 has-ml-2 is-unselectable" for="sun_switch">The Sun imitation mode</label>
+					</div>
+				</div>
+				<!--- --------- -->
+				<div class="card is-shadowed has-pt-4 has-pb-4 has-pl-0 has-pr-0 has-mb-4" align="center">
+					<div id="rgb_picker" align="center" class="has-pt-6 has-pb-6"></div>
+                    <div class="has-w-80 has-pl-2">
+						<div class="is-flex has-items-center has-justify-start">
+							<div><input type="range" id="uv_picker" class="slider has-w-64" min="0" max="255" value="0"/></div>
+						    <div><label class="label has-size-1 has-ml-2 is-unselectable">UV</label></div>
+						</div>
+						<div class="is-flex has-items-center has-justify-start">
+							<div><input type="range" id="w_picker" class="slider has-w-64" min="0" max="255" value="0"/></div>
+							<div><label class="label has-size-1 has-ml-2 is-unselectable">W</label></div>
+						</div>
+						<div class="is-flex has-items-center has-justify-start">
+							<div><input type="range" id="fito_picker" class="slider has-w-64" min="0" max="255" value="0"/></div>
+							<div><label class="label has-size-1 has-ml-2 is-unselectable">Fito</label></div>
+						</div>
+						<div class="is-flex has-items-center has-justify-start">
+							<div><input type="range" id="fan_picker" class="slider has-w-64" min="0" max="4" value="0"/></div>
+							<div><label class="label has-size-1 has-ml-2 is-unselectable">FAN</label></div>
+						</div>
+						<div class="is-flex has-items-center has-justify-start">
+							<div><input type="range" id="hf_picker" class="slider has-w-64" min="0" max="1" value="0"/></div>
+							<div><label class="label has-size-1 has-ml-2 is-unselectable">HF</label></div>
+				        </div>
 					</div>
 				</div>
             </div>
@@ -38,12 +65,17 @@
 		var ws;
 		var retries;
 		//var series = new TimeSeries();
-        var colorPicker = new iro.ColorPicker('#picker', { wheelLightness: false });
+        var rgbPicker = new iro.ColorPicker('#rgb_picker', { wheelLightness: false });
 		const wsProtocol = { getConnectionParameters: 0x01,
                              setConnectionParameters: 0x02,
                              setColor: 0x03,
 							 setSunImitationMode: 0x04,
 							 getStatus: 0x05,
+							 setUltraViolet: 0x06,
+							 setWhite: 0x07,
+							 setFito: 0x08,
+							 setFAN: 0x09,
+							 setHumidifier: 0x0A,
 						     success: 0x00,
 						     on: 0x01,
 						     off: 0x00,
@@ -60,9 +92,24 @@
 		{
 			console.log("Window loaded");
 		    wsOpen();
-			colorPicker.on('input:start', onStartColorChange);
-			colorPicker.on('input:end', onEndColorChange);
+			rgbPicker.on('input:start', onStartColorChange);
+			rgbPicker.on('input:end', onEndColorChange);
 			//startPolling();
+			uv_picker = document.getElementById('uv_picker');
+            uv_picker.addEventListener("change", onUvChange);
+			uv_picker.addEventListener("input", onInput);
+			w_picker = document.getElementById('w_picker');
+            w_picker.addEventListener("change", onWChange);
+			w_picker.addEventListener("input", onInput);
+			fito_picker = document.getElementById('fito_picker');
+            fito_picker.addEventListener("change", onFitoChange);
+			fito_picker.addEventListener("input", onInput);
+			fan_picker = document.getElementById('fan_picker');
+            fan_picker.addEventListener("change", onFanChange);
+			fan_picker.addEventListener("input", onInput);
+			hf_picker = document.getElementById('hf_picker');
+            hf_picker.addEventListener("change", onHfChange);
+			hf_picker.addEventListener("input", onInput);
 			intervalId = setInterval(getStatus, 1000);
 		}
 
@@ -85,6 +132,16 @@
 			console.log(text);
 		}
 
+		function uiUpdate(color, uv, w, fito, fan, hf)
+		{
+		    rgbPicker.color.set(color);
+			document.getElementById('uv_picker').value = uv;
+			document.getElementById('w_picker').value = w;
+			document.getElementById('fito_picker').value = fito;
+			document.getElementById('fan_picker').value = fan;
+			document.getElementById('hf_picker').value = hf;
+		}
+		
 		function onMessageFromServer(evt)
 		{
 			retries     = 0;
@@ -121,7 +178,12 @@
 			{
 				let mode = view[2];
 				let color = {r: view[3], g: view[4], b: view[5]};
-				let dts = getStrFromBuffer(view, 6);
+				let uv = view[6];
+				let w = view[7];
+				let fito = view[8];
+				let fan = view[9];
+				let hf = view[10];
+				let dts = getStrFromBuffer(view, 11);
 				console.log("Color = " + color.r + ":" + color.g + ":" + color.b + " - " + dts.value);
 
 				updateStatusBox("success", dts.value);
@@ -130,7 +192,7 @@
 
 				if ((wsProtocol.modeSunImitation == mode) && (true == sun_switch.checked))
 				{
-					colorPicker.color.set(color);
+					uiUpdate(color, uv, w, fito, fan, hf);
 				}
 				if (mode != modeChange.last)
 				{
@@ -150,14 +212,30 @@
 					{
 						sun_switch.checked = false;
 					}
-					colorPicker.color.set(color);
+					uiUpdate(color, uv, w, fito, fan, hf);
 					modeChange.needUiUpdate = false;
 				}
 			}
-			//if (val == 0xBEEF || val == 0xDEAD)
-			//	console.log("LED switched");
-			//else
-			//	series.append(new Date().getTime(), val);
+			else if ((wsProtocol.setUltraViolet == command) && (wsProtocol.success == status))
+			{
+				console.log("UltraViolet is set!");
+			}
+			else if ((wsProtocol.setWhite == command) && (wsProtocol.success == status))
+			{
+				console.log("White is set!");
+			}
+			else if ((wsProtocol.setFito == command) && (wsProtocol.success == status))
+			{
+				console.log("Fito is set!");
+			}
+			else if ((wsProtocol.setFAN == command) && (wsProtocol.success == status))
+			{
+				console.log("FAN is set!");
+			}
+			else if ((wsProtocol.setHumidifier == command) && (wsProtocol.success == status))
+			{
+				console.log("Humidifier is set!");
+			}
 		}
 		
 		//function wsOpenStream()
@@ -313,6 +391,55 @@
 
 			getStatus();
 		}
+
+		function onInput(event)
+		{
+			sun_switch = document.getElementById("sun_switch")
+			if (true == sun_switch.checked)
+			{
+				sun_switch.checked = false;
+				modeChange.initiatedByUser = true;
+			}
+		}
+		
+		function reportChange(option, value)
+		{
+            let buffer = new ArrayBuffer(2);
+            let view = new Uint8Array(buffer);
+			view[0] = option;
+			view[1] = value;
+			wsSendToServer(buffer);
+        }
+
+		function onUvChange(event)
+		{
+            console.log("End UV = " + event.target.value);
+            reportChange(wsProtocol.setUltraViolet, event.target.value);
+        }
+
+		function onWChange(event)
+		{
+            console.log("End W = " + event.target.value);
+            reportChange(wsProtocol.setWhite, event.target.value);
+        }
+
+		function onFitoChange(event)
+		{
+            console.log("End Fito = " + event.target.value);
+            reportChange(wsProtocol.setFito, event.target.value);
+        }
+
+		function onFanChange(event)
+		{
+            console.log("End FAN = " + event.target.value);
+            reportChange(wsProtocol.setFAN, event.target.value);
+        }
+
+		function onHfChange(event)
+		{
+            console.log("End Humidifier = " + event.target.value);
+            reportChange(wsProtocol.setHumidifier, event.target.value);
+        }
 
 			function startPolling() {
 				var chart = new SmoothieChart({millisPerPixel:11,grid:{fillStyle:'#ffffff',strokeStyle:'#ffffff',borderVisible:false},

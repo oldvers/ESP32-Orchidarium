@@ -408,6 +408,16 @@ to {transform:rotate(359deg);}
 @media screen and (min-width: 1264px) {
 .has-w-64-desktop {width:16rem;}
 }
+.has-w-80 {width:20rem;}
+@media screen and (max-width: 640px) {
+.has-w-80-mobile {width:20rem;}
+}
+@media screen and (min-width: 640px) {
+.has-w-80-tablet {width:20rem;}
+}
+@media screen and (min-width: 1264px) {
+.has-w-80-desktop {width:20rem;}
+}
 .has-w-96 {width:24rem;}
 @media screen and (max-width: 640px) {
 .has-w-96-mobile {width:24rem;}
