@@ -8,7 +8,8 @@
 #include "fan.h"
 #include "humidifier.h"
 #include "i2c.h"
-#include "udp_dns_server.h"
+#include "wifi_task.h"
+#include "time_task.h"
 
 //-------------------------------------------------------------------------------------------------
 
@@ -33,13 +34,14 @@ void app_main(void)
     MAIN_LOGI("--- Application Started ----------------------------------------");
 
     LED_Task_Init();
-    UDP_DNS_Task_Init();
+    WiFi_Task_Init();
+    Time_Task_Init();
 
-    LED_Task_Test();
-    LED_Strip_UWF_Test();
-    FAN_Test();
-    Humidifier_Test();
-    I2C_Test();
+//---    LED_Task_Test();
+//---    LED_Strip_UWF_Test();
+//---    FAN_Test();
+//---    Humidifier_Test();
+//---    I2C_Test();
 
     while (1)
     {

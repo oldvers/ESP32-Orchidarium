@@ -221,6 +221,20 @@
                     }
                 }
             }
-        }
+        },
+        {
+            "label": "mDNS - Add component",
+            "command": "python",
+            "type": "shell",
+            "args": [
+                "${env:IDF_PATH}\\tools\\idf.py",
+                "add-dependency",
+                "espressif/mdns"
+            ],
+            "group": "build",
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
     ]
 }
