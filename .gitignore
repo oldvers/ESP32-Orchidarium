@@ -12,3 +12,7 @@ managed_components
 
 # VS Code files
 *.VC.*DB*
+
+# Node.js files
+node_modules
+package*.json
