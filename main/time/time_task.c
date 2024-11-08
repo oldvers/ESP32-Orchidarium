@@ -222,7 +222,7 @@ static void time_PointsCalculate(time_t t, struct tm * p_dt, char * p_str)
     gmtime_r(&zero_time, p_dt);
     p_dt->tm_isdst = 1;
     tz_offset = mktime(p_dt);
-    TIME_LOGI("Time zone offset           : %10llu s", tz_offset);
+    TIME_LOGI("Time zone offset           : %10lld s", tz_offset);
 
     localtime_r(&ref_utc_time, p_dt);
     p_dt->tm_sec   = 0;
@@ -602,7 +602,7 @@ static void time_Test_Calculations(void)
     /* Determine the time zone offset */
     gmtime_r(&zero_time, &dt);
     tz_offset = mktime(&dt);
-    TIME_LOGI("Time zone offset           : %10llu s", tz_offset);
+    TIME_LOGI("Time zone offset           : %10lld s", tz_offset);
 
     localtime_r(&current_time, &dt);
     strftime(string, sizeof(string), "%c", &dt);
