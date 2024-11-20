@@ -298,7 +298,7 @@ static void wifi_Start(void)
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
 
     /* Set the command for indication */
-    led_msg.command = LED_CMD_INDICATE_FADE; 
+    led_msg.command = LED_CMD_RGB_INDICATE_FADE; 
 
     /* Station mode */
     if (WIFI_BOOT_CONNECT_TO_AP == gWiFiBoot)
@@ -389,7 +389,7 @@ static FW_BOOLEAN wifi_Connect(void)
             WIFI_LOGI("Connected successfuly");
 
             /* Indication - Rainbow Rotation (connected) */
-            led_msg.command = LED_CMD_INDICATE_RAINBOW_CIRCULATION;
+            led_msg.command = LED_CMD_RGB_INDICATE_RAINBOW_CIRCULATION;
             LED_Task_SendMsg(&led_msg);
 
             result = FW_TRUE;
@@ -413,7 +413,7 @@ static FW_BOOLEAN wifi_Connect(void)
             WIFI_LOGI("Connected successfuly");
 
             /* Indication - Running R-G-B (connected) */
-            led_msg.command = LED_CMD_INDICATE_RGB_CIRCULATION;
+            led_msg.command = LED_CMD_RGB_INDICATE_RGB_CIRCULATION;
             LED_Task_SendMsg(&led_msg);
 
             result = FW_TRUE;
@@ -434,7 +434,7 @@ static void wifi_WaitForDisconnect(void)
     led_message_t led_msg = {0};
 
     /* Set the command for indication */
-    led_msg.command = LED_CMD_INDICATE_FADE;
+    led_msg.command = LED_CMD_RGB_INDICATE_FADE;
 
     /* Station mode */
     if (WIFI_BOOT_CONNECT_TO_AP == gWiFiBoot)

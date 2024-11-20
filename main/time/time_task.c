@@ -75,13 +75,13 @@ static time_t         gAlarm     = LONG_MAX;
 /* Night             - 1153 minutes - RGB(  0,   0,  44) - RGB(  0,   0,  32) - None        */
 static time_point_t gPoints[TIME_POINT_COUNT] =
 {
-    {0, 0, RGBA(  0,   0,  32, 1), RGBA(  0,   0,  44, 1), LED_CMD_INDICATE_COLOR,   0},
-    {0, 0, RGBA(  0,   0,  44, 0), RGBA( 64,   0,  56, 1), LED_CMD_INDICATE_RAINBOW, 0},
-    {0, 0, RGBA( 64,   0,  56, 0), RGBA(220, 220,   0, 1), LED_CMD_INDICATE_RAINBOW, 0},
-    {0, 0, RGBA(220, 220,   0, 1), RGBA(255, 255, 255, 1), LED_CMD_INDICATE_SINE,    0},
-    {0, 0, RGBA(220, 220,   0, 1), RGBA( 64,   0,  56, 0), LED_CMD_INDICATE_RAINBOW, 0},
-    {0, 0, RGBA( 64,   0,  56, 1), RGBA(  0,   0,  44, 0), LED_CMD_INDICATE_RAINBOW, 0},
-    {0, 0, RGBA(  0,   0,  44, 1), RGBA(  0,   0,  32, 1), LED_CMD_INDICATE_COLOR,   0},
+    {0, 0, RGBA(  0,   0,  32, 1), RGBA(  0,   0,  44, 1), LED_CMD_RGB_INDICATE_COLOR,   0},
+    {0, 0, RGBA(  0,   0,  44, 0), RGBA( 64,   0,  56, 1), LED_CMD_RGB_INDICATE_RAINBOW, 0},
+    {0, 0, RGBA( 64,   0,  56, 0), RGBA(220, 220,   0, 1), LED_CMD_RGB_INDICATE_RAINBOW, 0},
+    {0, 0, RGBA(220, 220,   0, 1), RGBA(255, 255, 255, 1), LED_CMD_RGB_INDICATE_SINE,    0},
+    {0, 0, RGBA(220, 220,   0, 1), RGBA( 64,   0,  56, 0), LED_CMD_RGB_INDICATE_RAINBOW, 0},
+    {0, 0, RGBA( 64,   0,  56, 1), RGBA(  0,   0,  44, 0), LED_CMD_RGB_INDICATE_RAINBOW, 0},
+    {0, 0, RGBA(  0,   0,  44, 1), RGBA(  0,   0,  32, 1), LED_CMD_RGB_INDICATE_COLOR,   0},
 };
 
 //-------------------------------------------------------------------------------------------------
@@ -328,7 +328,7 @@ static void time_Indicate(time_t t, struct tm * p_dt, char * p_str, FW_BOOLEAN p
                 led_color_t   color   = {0};
                 led_message_t pre_msg = {0};
                 LED_Task_DetermineColor(&led_msg, &color);
-                pre_msg.command         = LED_CMD_INDICATE_COLOR;
+                pre_msg.command         = LED_CMD_RGB_INDICATE_COLOR;
                 pre_msg.dst_color.dword = color.dword;
                 pre_msg.interval        = TRANSITION_INTERVAL;
                 LED_Task_SendMsg(&pre_msg);
@@ -715,7 +715,7 @@ static void time_Test_Alarm(void)
     TIME_LOGI("Test time                  : %12lld - %s", now, string);
 
     /* Transition to DST color for 1100 ms */
-    led_msg.command         = LED_CMD_INDICATE_COLOR;
+    led_msg.command         = LED_CMD_RGB_INDICATE_COLOR;
     /* To - Red */
     led_msg.dst_color.r     = 255;
     led_msg.dst_color.g     = 0;

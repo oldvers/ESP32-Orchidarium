@@ -336,7 +336,7 @@ static void ctrl_SetColor(ctrl_req_p p_req, ctrl_rsp_p p_rsp)
 
     led_message_t led_msg =
     {
-        .command   = LED_CMD_INDICATE_COLOR,
+        .command   = LED_CMD_RGB_INDICATE_COLOR,
         .src_color = {.bytes = {0}},
         .dst_color = {.r = p_req->color.r, .g = p_req->color.g, .b = p_req->color.b},
         .interval  = 0,
@@ -402,9 +402,9 @@ static void ctrl_GetStatus(ctrl_req_p p_req, ctrl_rsp_p p_rsp, uint16_t * p_rsp_
     p_rsp->status.color.r         = color.r;
     p_rsp->status.color.g         = color.g;
     p_rsp->status.color.b         = color.b;
-    p_rsp->status.ultraviolet     = LED_Strip_U_GetBrightness();
-    p_rsp->status.white           = LED_Strip_W_GetBrightness();
-    p_rsp->status.fito            = LED_Strip_F_GetBrightness();
+    p_rsp->status.ultraviolet     = LED_Task_GetCurrentUltraViolet();
+    p_rsp->status.white           = LED_Task_GetCurrentWhite();
+    p_rsp->status.fito            = LED_Task_GetCurrentFito();
     p_rsp->status.fan             = 1; /* TODO: FAN_GetSpeed(); */
     p_rsp->status.humidifier      = 0; /* TODO: Get Humidifier On */
     p_rsp->status.pressure        = 101270; /* TODO: Get Pressure */
@@ -428,16 +428,15 @@ static void ctrl_SetUltraViolet(ctrl_req_p p_req, ctrl_rsp_p p_rsp)
 {
     HTTPS_LOGI("The UV received: %d", p_req->value);
 
-    /* TODO: led_message_t led_msg =
+    led_message_t led_msg =
     {
-        .command   = LED_CMD_INDICATE_COLOR,
-        .src_color = {.bytes = {0}},
-        .dst_color = {.r = data[1], .g = data[2], .b = data[3]},
-        .interval  = 0,
-        .duration  = 0
+        .command     = LED_CMD_UV_INDICATE_BRIGHTNESS,
+        .src_color.a = 0,
+        .dst_color.a = p_req->value,
+        .interval    = 0,
+        .duration    = 0
     };
-    LED_Task_SendMsg(&led_msg); */
-    LED_Strip_U_SetBrightness(p_req->value);
+    LED_Task_SendMsg(&led_msg);
 
     time_message_t time_msg =
     {
@@ -455,16 +454,15 @@ static void ctrl_SetWhite(ctrl_req_p p_req, ctrl_rsp_p p_rsp)
 {
     HTTPS_LOGI("The W received: %d", p_req->value);
 
-    /* TODO: led_message_t led_msg =
+    led_message_t led_msg =
     {
-        .command   = LED_CMD_INDICATE_COLOR,
-        .src_color = {.bytes = {0}},
-        .dst_color = {.r = data[1], .g = data[2], .b = data[3]},
-        .interval  = 0,
-        .duration  = 0
+        .command     = LED_CMD_W_INDICATE_BRIGHTNESS,
+        .src_color.a = 0,
+        .dst_color.a = p_req->value,
+        .interval    = 0,
+        .duration    = 0
     };
-    LED_Task_SendMsg(&led_msg); */
-    LED_Strip_W_SetBrightness(p_req->value);
+    LED_Task_SendMsg(&led_msg);
 
     time_message_t time_msg =
     {
@@ -482,16 +480,15 @@ static void ctrl_SetFito(ctrl_req_p p_req, ctrl_rsp_p p_rsp)
 {
     HTTPS_LOGI("The Fito received: %d", p_req->value);
 
-    /* TODO: led_message_t led_msg =
+    led_message_t led_msg =
     {
-        .command   = LED_CMD_INDICATE_COLOR,
-        .src_color = {.bytes = {0}},
-        .dst_color = {.r = data[1], .g = data[2], .b = data[3]},
-        .interval  = 0,
-        .duration  = 0
+        .command     = LED_CMD_F_INDICATE_BRIGHTNESS,
+        .src_color.a = 0,
+        .dst_color.a = p_req->value,
+        .interval    = 0,
+        .duration    = 0
     };
-    LED_Task_SendMsg(&led_msg); */
-    LED_Strip_F_SetBrightness(p_req->value);
+    LED_Task_SendMsg(&led_msg);
 
     time_message_t time_msg =
     {
@@ -768,7 +765,6 @@ void HTTP_Server_Init(bool config)
     HTTPS_LOGI("HTTP Config = %d", gConfig);
 
     /* TODO: Remove */
-    LED_Strip_UWF_Init();
     FAN_Init();
     Humidifier_Init();
 

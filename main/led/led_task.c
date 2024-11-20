@@ -17,7 +17,28 @@
 
 //-------------------------------------------------------------------------------------------------
 
+#define LED_TASK_TICK_MS (10)
+
+#define LED_TASK_LOG  0
+
+#if (1 == LED_TASK_LOG)
+static const char * gTAG = "LED";
+#    define LED_LOGI(...)  ESP_LOGI(gTAG, __VA_ARGS__)
+#    define LED_LOGE(...)  ESP_LOGE(gTAG, __VA_ARGS__)
+#    define LED_LOGV(...)  ESP_LOGV(gTAG, __VA_ARGS__)
+#else
+#    define LED_LOGI(...)
+#    define LED_LOGE(...)
+#    define LED_LOGV(...)
+#endif
+
+#define LED_RGB_STRIP_PIXELS_COUNT (18)
+
+//-------------------------------------------------------------------------------------------------
+
 typedef void (* iterate_fp_t)(void);
+typedef uint8_t (* get_fp_t)(void);
+typedef void (* set_fp_t)(uint8_t value);
 
 typedef struct
 {
@@ -50,36 +71,40 @@ typedef struct
     uint16_t      led;
     hsv_t         hsv;
     iterate_fp_t  fp_iterate;
-    uint8_t       buffer[LED_TASK_PIXELS_COUNT * 3];
-} leds_t;
+    uint8_t       buffer[LED_RGB_STRIP_PIXELS_COUNT * 3];
+} leds_rgb_t;
+
+typedef struct
+{
+    led_command_t command;
+    uint8_t       dst;
+    uint8_t       src;
+    led_tick_t    tick;
+    led_time_t    time;
+    iterate_fp_t  fp_iterate;
+    get_fp_t      fp_get;
+    set_fp_t      fp_set;
+} leds_t, * leds_p;
+
+typedef struct
+{
+    leds_t u;
+    leds_t w;
+    leds_t f;
+} leds_uwf_t;
 
 //-------------------------------------------------------------------------------------------------
 
-#define LED_TASK_TICK_MS (10)
+static const double  gPi           = 3.1415926;
 
-#define LED_TASK_LOG  0
-
-#if (1 == LED_TASK_LOG)
-static const char * gTAG = "LED";
-#    define LED_LOGI(...)  ESP_LOGI(gTAG, __VA_ARGS__)
-#    define LED_LOGE(...)  ESP_LOGE(gTAG, __VA_ARGS__)
-#    define LED_LOGV(...)  ESP_LOGV(gTAG, __VA_ARGS__)
-#else
-#    define LED_LOGI(...)
-#    define LED_LOGE(...)
-#    define LED_LOGV(...)
-#endif
+static QueueHandle_t gLedsRgbQueue = {0};
+static leds_rgb_t    gLedsRgb      = {0};
+static QueueHandle_t gLedsUwfQueue = {0};
+static leds_uwf_t    gLedsUwf      = {0};
 
 //-------------------------------------------------------------------------------------------------
 
-static const double  gPi       = 3.1415926;
-
-static QueueHandle_t gLedQueue = {0};
-static leds_t        gLeds     = {0};
-
-//-------------------------------------------------------------------------------------------------
-
-static void led_RGBtoHSV(led_color_t * p_color, hsv_t * p_hsv)
+static void rgb_RGBtoHSV(led_color_t * p_color, hsv_t * p_hsv)
 {
     double min, max, delta;
 
@@ -133,7 +158,7 @@ static void led_RGBtoHSV(led_color_t * p_color, hsv_t * p_hsv)
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_HSVtoRGB(hsv_t * p_hsv, led_color_t * p_color)
+static void rgb_HSVtoRGB(hsv_t * p_hsv, led_color_t * p_color)
 {
     double r = 0, g = 0, b = 0;
 
@@ -169,7 +194,7 @@ static double led_LinearInterpolation(double a, double b, double t)
 //-------------------------------------------------------------------------------------------------
 
 /* Calculates smooth color transition between two RGB colors */
-static void led_SmoothColorTransition
+static void rgb_SmoothColorTransition
 (
     led_color_t * p_a,
     led_color_t * p_b,
@@ -177,11 +202,11 @@ static void led_SmoothColorTransition
     led_color_t * p_r
 )
 {
-    // Clamp progress value between 0 and 1
+    /* Clamp progress value between 0 and 1 */
     if (prgs < 0) prgs = 0;
     if (prgs > 1) prgs = 1;
 
-    // Interpolate each RGB component separately
+    /* Interpolate each RGB component separately */
     p_r->r = (uint8_t)led_LinearInterpolation(p_a->r, p_b->r, prgs);
     p_r->g = (uint8_t)led_LinearInterpolation(p_a->g, p_b->g, prgs);
     p_r->b = (uint8_t)led_LinearInterpolation(p_a->b, p_b->b, prgs);
@@ -189,8 +214,8 @@ static void led_SmoothColorTransition
 
 //-------------------------------------------------------------------------------------------------
 
-// Calculates rainbow color transition between two RGB colors
-static void led_RainbowColorTransition
+/* Calculates rainbow color transition between two RGB colors */
+static void rgb_RainbowColorTransition
 (
     led_color_t * p_a,
     led_color_t * p_b,
@@ -203,8 +228,8 @@ static void led_RainbowColorTransition
     hsv_t       hsv     = {0};
 
     /* Determine the SRC/DST HSVs */
-    led_RGBtoHSV(p_a, &src_hsv);
-    led_RGBtoHSV(p_b, &dst_hsv);
+    rgb_RGBtoHSV(p_a, &src_hsv);
+    rgb_RGBtoHSV(p_b, &dst_hsv);
 
     /* Calculate Hue */
     if ((1 == p_b->a) && (dst_hsv.h < src_hsv.h))
@@ -225,29 +250,29 @@ static void led_RainbowColorTransition
     hsv.v = ((dst_hsv.v - src_hsv.v) * prgs + src_hsv.v);
     /* Calculate Saturation */
     hsv.s = ((dst_hsv.s - src_hsv.s) * prgs + src_hsv.s);
-    led_HSVtoRGB(&hsv, p_r);
+    rgb_HSVtoRGB(&hsv, p_r);
 }
 
 //-------------------------------------------------------------------------------------------------
 //--- Simple Color Indication ---------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------
 
-static void led_IterateIndication_Color(void)
+static void rgb_IterateIndication_Color(void)
 {
     led_color_t result  = {0};
-    double      percent = (1.0 * gLeds.time.duration / gLeds.time.interval);
+    double      percent = (1.0 * gLedsRgb.time.duration / gLedsRgb.time.interval);
 
-    if ((gLeds.dst_color.dword != gLeds.src_color.dword) &&
-        (gLeds.time.duration < gLeds.time.interval))
+    if ((gLedsRgb.dst_color.dword != gLedsRgb.src_color.dword) &&
+        (gLedsRgb.time.duration < gLedsRgb.time.interval))
     {
-        led_SmoothColorTransition(&gLeds.src_color, &gLeds.dst_color, percent, &result);
-        gLeds.time.duration += gLeds.time.delta;
+        rgb_SmoothColorTransition(&gLedsRgb.src_color, &gLedsRgb.dst_color, percent, &result);
+        gLedsRgb.time.duration += gLedsRgb.time.delta;
     }
     else
     {
-        result.dword          = gLeds.dst_color.dword;
-        gLeds.src_color.dword = gLeds.dst_color.dword;
-        gLeds.command         = LED_CMD_EMPTY;
+        result.dword             = gLedsRgb.dst_color.dword;
+        gLedsRgb.src_color.dword = gLedsRgb.dst_color.dword;
+        gLedsRgb.command         = LED_CMD_EMPTY;
     }
     LED_Strip_RGB_SetColor(&result);
     LED_Strip_RGB_Update();
@@ -257,202 +282,202 @@ static void led_IterateIndication_Color(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_SetIndication_Color(led_message_t * p_msg)
+static void rgb_SetIndication_Color(led_message_t * p_msg)
 {
     enum
     {
         MIN_TRANSITION_TIME_MS = 1000,
     };
 
-    gLeds.dst_color.dword = 0;
-    gLeds.dst_color.r     = p_msg->dst_color.r;
-    gLeds.dst_color.g     = p_msg->dst_color.g;
-    gLeds.dst_color.b     = p_msg->dst_color.b;
+    gLedsRgb.dst_color.dword = 0;
+    gLedsRgb.dst_color.r     = p_msg->dst_color.r;
+    gLedsRgb.dst_color.g     = p_msg->dst_color.g;
+    gLedsRgb.dst_color.b     = p_msg->dst_color.b;
 
     /* Set the default tick interval to 30 ms */
-    gLeds.tick.interval = 3;
-    gLeds.tick.counter  = gLeds.tick.interval;
-    gLeds.time.delta    = (gLeds.tick.interval * LED_TASK_TICK_MS);
+    gLedsRgb.tick.interval = 3;
+    gLedsRgb.tick.counter  = gLedsRgb.tick.interval;
+    gLedsRgb.time.delta    = (gLedsRgb.tick.interval * LED_TASK_TICK_MS);
 
     /* Determine the SRC color */
-    gLeds.src_color.dword = 0;
+    gLedsRgb.src_color.dword = 0;
     if (0 == p_msg->src_color.a)
     {
-        LED_Strip_RGB_GetAverageColor(&gLeds.src_color);
+        LED_Strip_RGB_GetAverageColor(&gLedsRgb.src_color);
     }
     else
     {
-        gLeds.src_color.r = p_msg->src_color.r;
-        gLeds.src_color.g = p_msg->src_color.g;
-        gLeds.src_color.b = p_msg->src_color.b;
+        gLedsRgb.src_color.r = p_msg->src_color.r;
+        gLedsRgb.src_color.g = p_msg->src_color.g;
+        gLedsRgb.src_color.b = p_msg->src_color.b;
     }
 
     /* Calculate the timer parameters */
     if ((MIN_TRANSITION_TIME_MS < p_msg->interval) && (p_msg->duration < p_msg->interval))
     {
         /* Use timings from the request */
-        gLeds.time.interval = p_msg->interval;
-        gLeds.time.duration = p_msg->duration;
+        gLedsRgb.time.interval = p_msg->interval;
+        gLedsRgb.time.duration = p_msg->duration;
     }
     else
     {
         /* Use default timings */
-        gLeds.time.interval = MIN_TRANSITION_TIME_MS;
-        gLeds.time.duration = 0;
+        gLedsRgb.time.interval = MIN_TRANSITION_TIME_MS;
+        gLedsRgb.time.duration = 0;
     }
-    gLeds.fp_iterate = led_IterateIndication_Color;
-    gLeds.fp_iterate();
+    gLedsRgb.fp_iterate = rgb_IterateIndication_Color;
+    gLedsRgb.fp_iterate();
 }
 
 //-------------------------------------------------------------------------------------------------
 //--- RGB Circulation LED Indication --------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------
 
-static void led_IterateIndication_RgbCirculation(void)
+static void rgb_IterateIndication_RgbCirculation(void)
 {
     LED_Strip_RGB_Update();
     LED_Strip_RGB_Rotate(false);
-    if (UINT16_MAX != gLeds.led)
+    if (UINT16_MAX != gLedsRgb.led)
     {
-        gLeds.led = ((gLeds.led + 1) % (sizeof(gLeds.buffer) / 3));
+        gLedsRgb.led = ((gLedsRgb.led + 1) % (sizeof(gLedsRgb.buffer) / 3));
         /* Switch the color R -> G -> B */
-        if (0 == gLeds.led)
+        if (0 == gLedsRgb.led)
         {
-            gLeds.dst_color.bytes[gLeds.offset++] = 0;
-            gLeds.offset %= 3;
-            gLeds.dst_color.bytes[gLeds.offset] = UINT8_MAX;
-            LED_Strip_RGB_SetPixelColor(gLeds.led, &gLeds.dst_color);
+            gLedsRgb.dst_color.bytes[gLedsRgb.offset++] = 0;
+            gLedsRgb.offset %= 3;
+            gLedsRgb.dst_color.bytes[gLedsRgb.offset] = UINT8_MAX;
+            LED_Strip_RGB_SetPixelColor(gLedsRgb.led, &gLedsRgb.dst_color);
         }
     }
 }
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_SetIndication_RgbCirculation(led_message_t * p_msg)
+static void rgb_SetIndication_RgbCirculation(led_message_t * p_msg)
 {
     LED_Strip_RGB_Clear();
 
-    gLeds.dst_color.dword = 0;
-    gLeds.dst_color.r     = p_msg->dst_color.r;
-    gLeds.dst_color.g     = p_msg->dst_color.g;
-    gLeds.dst_color.b     = p_msg->dst_color.b;
+    gLedsRgb.dst_color.dword = 0;
+    gLedsRgb.dst_color.r     = p_msg->dst_color.r;
+    gLedsRgb.dst_color.g     = p_msg->dst_color.g;
+    gLedsRgb.dst_color.b     = p_msg->dst_color.b;
 
     /* Set the color depending on color settings */
-    if (0 == gLeds.dst_color.dword)
+    if (0 == gLedsRgb.dst_color.dword)
     {
-        gLeds.offset      = 0;
-        gLeds.led         = 0;
-        gLeds.dst_color.r = UINT8_MAX;
-        LED_Strip_RGB_SetPixelColor(gLeds.led, &gLeds.dst_color);
+        gLedsRgb.offset      = 0;
+        gLedsRgb.led         = 0;
+        gLedsRgb.dst_color.r = UINT8_MAX;
+        LED_Strip_RGB_SetPixelColor(gLedsRgb.led, &gLedsRgb.dst_color);
     }
     else
     {
-        gLeds.offset = UINT8_MAX;
-        gLeds.led    = UINT16_MAX;
-        LED_Strip_RGB_SetPixelColor(0, &gLeds.dst_color);
+        gLedsRgb.offset = UINT8_MAX;
+        gLedsRgb.led    = UINT16_MAX;
+        LED_Strip_RGB_SetPixelColor(0, &gLedsRgb.dst_color);
     }
     /* Set the default tick interval to 40 ms */
-    gLeds.tick.interval = 4;
-    gLeds.tick.counter  = gLeds.tick.interval;
-    gLeds.fp_iterate    = led_IterateIndication_RgbCirculation;
-    gLeds.fp_iterate();
+    gLedsRgb.tick.interval = 4;
+    gLedsRgb.tick.counter  = gLedsRgb.tick.interval;
+    gLedsRgb.fp_iterate    = rgb_IterateIndication_RgbCirculation;
+    gLedsRgb.fp_iterate();
 }
 
 //-------------------------------------------------------------------------------------------------
 //--- Fade LED Indication -------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------
 
-static void led_IterateIndication_Fade(void)
+static void rgb_IterateIndication_Fade(void)
 {
     enum
     {
         MAX_FADE_LEVEL = 30,
     };
 
-    led_HSVtoRGB(&gLeds.hsv, &gLeds.dst_color);
-    LED_Strip_RGB_SetColor(&gLeds.dst_color);
+    rgb_HSVtoRGB(&gLedsRgb.hsv, &gLedsRgb.dst_color);
+    LED_Strip_RGB_SetColor(&gLedsRgb.dst_color);
     LED_Strip_RGB_Update();
 
-    gLeds.led++;
-    if (MAX_FADE_LEVEL == gLeds.led)
+    gLedsRgb.led++;
+    if (MAX_FADE_LEVEL == gLedsRgb.led)
     {
-        gLeds.led    = 0;
-        gLeds.offset = ((gLeds.offset + 1) % 2);
+        gLedsRgb.led    = 0;
+        gLedsRgb.offset = ((gLedsRgb.offset + 1) % 2);
     }
-    if (0 == gLeds.offset)
+    if (0 == gLedsRgb.offset)
     {
-        gLeds.hsv.v = (gLeds.led * 0.02);
+        gLedsRgb.hsv.v = (gLedsRgb.led * 0.02);
     }
     else
     {
-        gLeds.hsv.v = ((MAX_FADE_LEVEL - gLeds.led - 1) * 0.02);
+        gLedsRgb.hsv.v = ((MAX_FADE_LEVEL - gLedsRgb.led - 1) * 0.02);
     }
 }
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_SetIndication_Fade(led_message_t * p_msg)
+static void rgb_SetIndication_Fade(led_message_t * p_msg)
 {
     LED_Strip_RGB_Clear();
 
-    gLeds.dst_color.dword = 0;
-    gLeds.dst_color.r     = p_msg->dst_color.r;
-    gLeds.dst_color.g     = p_msg->dst_color.g;
-    gLeds.dst_color.b     = p_msg->dst_color.b;
+    gLedsRgb.dst_color.dword = 0;
+    gLedsRgb.dst_color.r     = p_msg->dst_color.r;
+    gLedsRgb.dst_color.g     = p_msg->dst_color.g;
+    gLedsRgb.dst_color.b     = p_msg->dst_color.b;
 
-    led_RGBtoHSV(&gLeds.dst_color, &gLeds.hsv);
-    gLeds.hsv.v         = 0.0;
-    gLeds.offset        = 0;
-    gLeds.led           = 0;
+    rgb_RGBtoHSV(&gLedsRgb.dst_color, &gLedsRgb.hsv);
+    gLedsRgb.hsv.v  = 0.0;
+    gLedsRgb.offset = 0;
+    gLedsRgb.led    = 0;
     /* Set the default tick interval to 30 ms */
-    gLeds.tick.interval = 3;
-    gLeds.tick.counter  = gLeds.tick.interval;
-    gLeds.fp_iterate    = led_IterateIndication_Fade;
-    gLeds.fp_iterate();
+    gLedsRgb.tick.interval = 3;
+    gLedsRgb.tick.counter  = gLedsRgb.tick.interval;
+    gLedsRgb.fp_iterate    = rgb_IterateIndication_Fade;
+    gLedsRgb.fp_iterate();
 }
 
 //-------------------------------------------------------------------------------------------------
 //--- PingPong LED Indication ---------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------
 
-static void led_IterateIndication_PingPong(void)
+static void rgb_IterateIndication_PingPong(void)
 {
     LED_Strip_RGB_Update();
-    LED_Strip_RGB_Rotate(0 == gLeds.offset);
+    LED_Strip_RGB_Rotate(0 == gLedsRgb.offset);
 
-    gLeds.led++;
-    if ((sizeof(gLeds.buffer) / 3) == gLeds.led)
+    gLedsRgb.led++;
+    if ((sizeof(gLedsRgb.buffer) / 3) == gLedsRgb.led)
     {
-        gLeds.led    = 0;
-        gLeds.offset = ((gLeds.offset + 1) % 2);
+        gLedsRgb.led    = 0;
+        gLedsRgb.offset = ((gLedsRgb.offset + 1) % 2);
     }
 }
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_SetIndication_PingPong(led_message_t * p_msg)
+static void rgb_SetIndication_PingPong(led_message_t * p_msg)
 {
     LED_Strip_RGB_Clear();
 
-    gLeds.dst_color.dword = 0;
-    gLeds.dst_color.r     = p_msg->dst_color.r;
-    gLeds.dst_color.g     = p_msg->dst_color.g;
-    gLeds.dst_color.b     = p_msg->dst_color.b;
-    gLeds.offset          = 0;
-    gLeds.led             = 0;
-    LED_Strip_RGB_SetPixelColor(gLeds.led, &gLeds.dst_color);
+    gLedsRgb.dst_color.dword = 0;
+    gLedsRgb.dst_color.r     = p_msg->dst_color.r;
+    gLedsRgb.dst_color.g     = p_msg->dst_color.g;
+    gLedsRgb.dst_color.b     = p_msg->dst_color.b;
+    gLedsRgb.offset          = 0;
+    gLedsRgb.led             = 0;
+    LED_Strip_RGB_SetPixelColor(gLedsRgb.led, &gLedsRgb.dst_color);
     /* Set the default tick interval to 40 ms */
-    gLeds.tick.interval = 4;
-    gLeds.tick.counter  = gLeds.tick.interval;
-    gLeds.fp_iterate    = led_IterateIndication_PingPong;
-    gLeds.fp_iterate();
+    gLedsRgb.tick.interval = 4;
+    gLedsRgb.tick.counter  = gLedsRgb.tick.interval;
+    gLedsRgb.fp_iterate    = rgb_IterateIndication_PingPong;
+    gLedsRgb.fp_iterate();
 }
 
 //-------------------------------------------------------------------------------------------------
 //--- Rainbow LED Indication ---------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------
 
-static void led_IterateIndication_RainbowCirculation(void)
+static void rgb_IterateIndication_RainbowCirculation(void)
 {
     LED_Strip_RGB_Rotate(false);
     LED_Strip_RGB_Update();
@@ -460,67 +485,77 @@ static void led_IterateIndication_RainbowCirculation(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_SetIndication_RainbowCirculation(led_message_t * p_msg)
+static void rgb_SetIndication_RainbowCirculation(led_message_t * p_msg)
 {
     double max = 0.0;
 
-    gLeds.dst_color.dword = 0;
-    gLeds.dst_color.r     = p_msg->dst_color.r;
-    gLeds.dst_color.g     = p_msg->dst_color.g;
-    gLeds.dst_color.b     = p_msg->dst_color.b;
+    gLedsRgb.dst_color.dword = 0;
+    gLedsRgb.dst_color.r     = p_msg->dst_color.r;
+    gLedsRgb.dst_color.g     = p_msg->dst_color.g;
+    gLedsRgb.dst_color.b     = p_msg->dst_color.b;
 
-    if (0 == gLeds.dst_color.dword)
+    if (0 == gLedsRgb.dst_color.dword)
     {
         /* Running Rainbow */
         max = 0.222;
         /* Set the default tick interval to 60 ms */
-        gLeds.tick.interval = 6;
-        gLeds.tick.counter  = gLeds.tick.interval;
-        gLeds.fp_iterate    = led_IterateIndication_RainbowCirculation;
+        gLedsRgb.tick.interval = 6;
+        gLedsRgb.tick.counter  = gLedsRgb.tick.interval;
+        gLedsRgb.fp_iterate    = rgb_IterateIndication_RainbowCirculation;
     }
     else
     {
         /* Static Rainbow */
-        max = (gLeds.dst_color.r > gLeds.dst_color.g) ? gLeds.dst_color.r : gLeds.dst_color.g;
-        max = (max > gLeds.dst_color.b) ? max : gLeds.dst_color.b;
+        if (gLedsRgb.dst_color.r > gLedsRgb.dst_color.g)
+        {
+            max = gLedsRgb.dst_color.r;
+        }
+        else
+        {
+            max = gLedsRgb.dst_color.g;
+        }
+        if (max < gLedsRgb.dst_color.b)
+        {
+            max = gLedsRgb.dst_color.b;
+        }
         max /= 255.0;
         /* Disable iteration */
-        gLeds.command       = LED_CMD_EMPTY;
-        gLeds.tick.interval = 0;
-        gLeds.tick.counter  = 0;
-        gLeds.fp_iterate    = NULL;
+        gLedsRgb.command       = LED_CMD_EMPTY;
+        gLedsRgb.tick.interval = 0;
+        gLedsRgb.tick.counter  = 0;
+        gLedsRgb.fp_iterate    = NULL;
     }
 
     /* Draw the Rainbow */
-    gLeds.hsv.s = 1.0;
-    gLeds.hsv.v = max;
-    for (gLeds.led = 0; gLeds.led < (sizeof(gLeds.buffer) / 3); gLeds.led++)
+    gLedsRgb.hsv.s = 1.0;
+    gLedsRgb.hsv.v = max;
+    for (gLedsRgb.led = 0; gLedsRgb.led < (sizeof(gLedsRgb.buffer) / 3); gLedsRgb.led++)
     {
-        gLeds.hsv.h = ((gLeds.led + 0.5) * 1.0 / (sizeof(gLeds.buffer) / 3));
-        led_HSVtoRGB(&gLeds.hsv, &gLeds.dst_color);
-        LED_Strip_RGB_SetPixelColor(gLeds.led, &gLeds.dst_color);
+        gLedsRgb.hsv.h = ((gLedsRgb.led + 0.5) * 1.0 / (sizeof(gLedsRgb.buffer) / 3));
+        rgb_HSVtoRGB(&gLedsRgb.hsv, &gLedsRgb.dst_color);
+        LED_Strip_RGB_SetPixelColor(gLedsRgb.led, &gLedsRgb.dst_color);
     }
     LED_Strip_RGB_Update();
 }
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_IterateIndication_Rainbow(void)
+static void rgb_IterateIndication_Rainbow(void)
 {
     led_color_t result  = {0};
-    double      percent = (1.0 * gLeds.time.duration / gLeds.time.interval);
+    double      percent = (1.0 * gLedsRgb.time.duration / gLedsRgb.time.interval);
 
-    if ((gLeds.dst_color.dword != gLeds.src_color.dword) &&
-        (gLeds.time.duration < gLeds.time.interval))
+    if ((gLedsRgb.dst_color.dword != gLedsRgb.src_color.dword) &&
+        (gLedsRgb.time.duration < gLedsRgb.time.interval))
     {
-        led_RainbowColorTransition(&gLeds.src_color, &gLeds.dst_color, percent, &result);
-        gLeds.time.duration += gLeds.time.delta;
+        rgb_RainbowColorTransition(&gLedsRgb.src_color, &gLedsRgb.dst_color, percent, &result);
+        gLedsRgb.time.duration += gLedsRgb.time.delta;
     }
     else
     {
-        result.dword          = gLeds.dst_color.dword;
-        gLeds.src_color.dword = gLeds.dst_color.dword;
-        gLeds.command         = LED_CMD_EMPTY;
+        result.dword             = gLedsRgb.dst_color.dword;
+        gLedsRgb.src_color.dword = gLedsRgb.dst_color.dword;
+        gLedsRgb.command         = LED_CMD_EMPTY;
     }
 
     LED_Strip_RGB_SetColor(&result);
@@ -531,7 +566,7 @@ static void led_IterateIndication_Rainbow(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_SetIndication_Rainbow(led_message_t * p_msg)
+static void rgb_SetIndication_Rainbow(led_message_t * p_msg)
 {
     enum
     {
@@ -539,62 +574,62 @@ static void led_SetIndication_Rainbow(led_message_t * p_msg)
     };
 
     /* Store the SRC/DST colors */
-    gLeds.dst_color.dword = p_msg->dst_color.dword;
-    gLeds.src_color.dword = p_msg->src_color.dword;
+    gLedsRgb.dst_color.dword = p_msg->dst_color.dword;
+    gLedsRgb.src_color.dword = p_msg->src_color.dword;
 
     /* Set the default tick interval to 30 ms */
-    gLeds.tick.interval = 3;
-    gLeds.tick.counter  = gLeds.tick.interval;
-    gLeds.time.delta    = (gLeds.tick.interval * LED_TASK_TICK_MS);
+    gLedsRgb.tick.interval = 3;
+    gLedsRgb.tick.counter  = gLedsRgb.tick.interval;
+    gLedsRgb.time.delta    = (gLedsRgb.tick.interval * LED_TASK_TICK_MS);
 
     /* Check the rainbow changing direction */
     if (0 == (p_msg->src_color.a ^ p_msg->dst_color.a))
     {
         /* The direction is set incorrectly - get the current color */
-        LED_Strip_RGB_GetAverageColor(&gLeds.src_color);
+        LED_Strip_RGB_GetAverageColor(&gLedsRgb.src_color);
         /* Set the default direction */
-        gLeds.dst_color.a = 1;
-        gLeds.src_color.a = 0;
+        gLedsRgb.dst_color.a = 1;
+        gLedsRgb.src_color.a = 0;
     }
 
     /* Calculate the timer parameters */
     if ((MIN_TRANSITION_TIME_MS < p_msg->interval) && (p_msg->duration < p_msg->interval))
     {
         /* Use timings from the request */
-        gLeds.time.interval = p_msg->interval;
-        gLeds.time.duration = p_msg->duration;
+        gLedsRgb.time.interval = p_msg->interval;
+        gLedsRgb.time.duration = p_msg->duration;
     }
     else
     {
         /* Use default timings */
-        gLeds.time.interval = MIN_TRANSITION_TIME_MS;
-        gLeds.time.duration = 0;
+        gLedsRgb.time.interval = MIN_TRANSITION_TIME_MS;
+        gLedsRgb.time.duration = 0;
     }
-    gLeds.fp_iterate = led_IterateIndication_Rainbow;
-    gLeds.fp_iterate();
+    gLedsRgb.fp_iterate = rgb_IterateIndication_Rainbow;
+    gLedsRgb.fp_iterate();
 }
 
 //-------------------------------------------------------------------------------------------------
 //--- Sine Color Indication -----------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------
 
-static void led_IterateIndication_Sine(void)
+static void rgb_IterateIndication_Sine(void)
 {
     led_color_t  result  = {0};
-    double       percent = (1.0 * gLeds.time.duration / gLeds.time.interval);
+    double       percent = (1.0 * gLedsRgb.time.duration / gLedsRgb.time.interval);
 
-    if ((gLeds.dst_color.dword != gLeds.src_color.dword) &&
-        (gLeds.time.duration < gLeds.time.interval))
+    if ((gLedsRgb.dst_color.dword != gLedsRgb.src_color.dword) &&
+        (gLedsRgb.time.duration < gLedsRgb.time.interval))
     {
         percent = sin(percent * gPi);
-        led_SmoothColorTransition(&gLeds.src_color, &gLeds.dst_color, percent, &result);
-        gLeds.time.duration += gLeds.time.delta;
+        rgb_SmoothColorTransition(&gLedsRgb.src_color, &gLedsRgb.dst_color, percent, &result);
+        gLedsRgb.time.duration += gLedsRgb.time.delta;
     }
     else
     {
-        result.dword          = gLeds.src_color.dword;
-        gLeds.dst_color.dword = gLeds.src_color.dword;
-        gLeds.command         = LED_CMD_EMPTY;
+        result.dword             = gLedsRgb.src_color.dword;
+        gLedsRgb.dst_color.dword = gLedsRgb.src_color.dword;
+        gLedsRgb.command         = LED_CMD_EMPTY;
     }
     LED_Strip_RGB_SetColor(&result);
     LED_Strip_RGB_Update();
@@ -604,110 +639,110 @@ static void led_IterateIndication_Sine(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_SetIndication_Sine(led_message_t * p_msg)
+static void rgb_SetIndication_Sine(led_message_t * p_msg)
 {
     enum
     {
         MIN_TRANSITION_TIME_MS = 1000,
     };
 
-    gLeds.dst_color.dword = 0;
-    gLeds.dst_color.r     = p_msg->dst_color.r;
-    gLeds.dst_color.g     = p_msg->dst_color.g;
-    gLeds.dst_color.b     = p_msg->dst_color.b;
+    gLedsRgb.dst_color.dword = 0;
+    gLedsRgb.dst_color.r     = p_msg->dst_color.r;
+    gLedsRgb.dst_color.g     = p_msg->dst_color.g;
+    gLedsRgb.dst_color.b     = p_msg->dst_color.b;
 
     /* Set the default tick interval to 30 ms */
-    gLeds.tick.interval = 3;
-    gLeds.tick.counter  = gLeds.tick.interval;
-    gLeds.time.delta    = (gLeds.tick.interval * LED_TASK_TICK_MS);
+    gLedsRgb.tick.interval = 3;
+    gLedsRgb.tick.counter  = gLedsRgb.tick.interval;
+    gLedsRgb.time.delta    = (gLedsRgb.tick.interval * LED_TASK_TICK_MS);
 
     /* Determine the SRC color */
-    gLeds.src_color.dword = 0;
+    gLedsRgb.src_color.dword = 0;
     if (0 == p_msg->src_color.a)
     {
-        LED_Strip_RGB_GetAverageColor(&gLeds.src_color);
+        LED_Strip_RGB_GetAverageColor(&gLedsRgb.src_color);
     }
     else
     {
-        gLeds.src_color.r = p_msg->src_color.r;
-        gLeds.src_color.g = p_msg->src_color.g;
-        gLeds.src_color.b = p_msg->src_color.b;
+        gLedsRgb.src_color.r = p_msg->src_color.r;
+        gLedsRgb.src_color.g = p_msg->src_color.g;
+        gLedsRgb.src_color.b = p_msg->src_color.b;
     }
 
     /* Calculate the timer parameters */
     if ((MIN_TRANSITION_TIME_MS < p_msg->interval) && (p_msg->duration < p_msg->interval))
     {
         /* Use timings from the request */
-        gLeds.time.interval = p_msg->interval;
-        gLeds.time.duration = p_msg->duration;
+        gLedsRgb.time.interval = p_msg->interval;
+        gLedsRgb.time.duration = p_msg->duration;
     }
     else
     {
         /* Use default timings */
-        gLeds.time.interval = MIN_TRANSITION_TIME_MS;
-        gLeds.time.duration = 0;
+        gLedsRgb.time.interval = MIN_TRANSITION_TIME_MS;
+        gLedsRgb.time.duration = 0;
     }
-    gLeds.fp_iterate   = led_IterateIndication_Sine;
-    gLeds.fp_iterate();
+    gLedsRgb.fp_iterate   = rgb_IterateIndication_Sine;
+    gLedsRgb.fp_iterate();
 }
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_ProcessMsg(led_message_t * p_msg)
+static void rgb_ProcessMsg(led_message_t * p_msg)
 {
-    gLeds.command = p_msg->command;
-    switch (gLeds.command)
+    gLedsRgb.command = p_msg->command;
+    switch (gLedsRgb.command)
     {
-        case LED_CMD_INDICATE_COLOR:
-            led_SetIndication_Color(p_msg);
+        case LED_CMD_RGB_INDICATE_COLOR:
+            rgb_SetIndication_Color(p_msg);
             break;
-        case LED_CMD_INDICATE_RGB_CIRCULATION:
-            led_SetIndication_RgbCirculation(p_msg);
+        case LED_CMD_RGB_INDICATE_RGB_CIRCULATION:
+            rgb_SetIndication_RgbCirculation(p_msg);
             break;
-        case LED_CMD_INDICATE_FADE:
-            led_SetIndication_Fade(p_msg);
+        case LED_CMD_RGB_INDICATE_FADE:
+            rgb_SetIndication_Fade(p_msg);
             break;
-        case LED_CMD_INDICATE_PINGPONG:
-            led_SetIndication_PingPong(p_msg);
+        case LED_CMD_RGB_INDICATE_PINGPONG:
+            rgb_SetIndication_PingPong(p_msg);
             break;
-        case LED_CMD_INDICATE_RAINBOW_CIRCULATION:
-            led_SetIndication_RainbowCirculation(p_msg);
+        case LED_CMD_RGB_INDICATE_RAINBOW_CIRCULATION:
+            rgb_SetIndication_RainbowCirculation(p_msg);
             break;
-        case LED_CMD_INDICATE_RAINBOW:
-            led_SetIndication_Rainbow(p_msg);
+        case LED_CMD_RGB_INDICATE_RAINBOW:
+            rgb_SetIndication_Rainbow(p_msg);
             break;
-        case LED_CMD_INDICATE_SINE:
-            led_SetIndication_Sine(p_msg);
+        case LED_CMD_RGB_INDICATE_SINE:
+            rgb_SetIndication_Sine(p_msg);
             break;
         default:
-            gLeds.command       = LED_CMD_EMPTY;
-            gLeds.fp_iterate    = NULL;
-            gLeds.tick.interval = 0;
-            gLeds.tick.counter  = 0;
+            gLedsRgb.command       = LED_CMD_EMPTY;
+            gLedsRgb.fp_iterate    = NULL;
+            gLedsRgb.tick.interval = 0;
+            gLedsRgb.tick.counter  = 0;
             break;
     }
 }
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_Process(void)
+static void rgb_Process(void)
 {
-    if (LED_CMD_EMPTY == gLeds.command) return;
+    if (LED_CMD_EMPTY == gLedsRgb.command) return;
 
-    gLeds.tick.counter--;
-    if (0 == gLeds.tick.counter)
+    gLedsRgb.tick.counter--;
+    if (0 == gLedsRgb.tick.counter)
     {
-        if (NULL != gLeds.fp_iterate)
+        if (NULL != gLedsRgb.fp_iterate)
         {
-            gLeds.fp_iterate();
+            gLedsRgb.fp_iterate();
         }
-        gLeds.tick.counter = gLeds.tick.interval;
+        gLedsRgb.tick.counter = gLedsRgb.tick.interval;
     }
 }
 
 //-------------------------------------------------------------------------------------------------
 
-static void vLED_Task(void * pvParameters)
+static void vRGB_Task(void * pvParameters)
 {
     enum
     {
@@ -716,9 +751,9 @@ static void vLED_Task(void * pvParameters)
     BaseType_t    status = pdFAIL;
     led_message_t msg    = {0};
 
-    LED_LOGI("LED Task started...");
+    LED_LOGI("LED RGB Task started...");
 
-    LED_Strip_RGB_Init(gLeds.buffer, sizeof(gLeds.buffer));
+    LED_Strip_RGB_Init(gLedsRgb.buffer, sizeof(gLedsRgb.buffer));
     vTaskDelay(pdMS_TO_TICKS(INIT_DELAY));
     LED_Strip_RGB_PowerOn();
     vTaskDelay(pdMS_TO_TICKS(INIT_DELAY));
@@ -730,15 +765,301 @@ static void vLED_Task(void * pvParameters)
 
     while (FW_TRUE)
     {
-        status = xQueueReceive(gLedQueue, (void *)&msg, pdMS_TO_TICKS(LED_TASK_TICK_MS));
+        status = xQueueReceive(gLedsRgbQueue, (void *)&msg, pdMS_TO_TICKS(LED_TASK_TICK_MS));
 
         if (pdTRUE == status)
         {
-            led_ProcessMsg(&msg);
+            rgb_ProcessMsg(&msg);
         }
         else
         {
-            led_Process();
+            rgb_Process();
+        }
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+
+/* Calculates smooth brightness transition between two values */
+static uint8_t uwf_SmoothBrightnessTransition(uint8_t a, uint8_t b, double prgs)
+{
+    /* Clamp progress value between 0 and 1 */
+    if (prgs < 0) prgs = 0;
+    if (prgs > 1) prgs = 1;
+
+    /* Interpolate brightness */
+    return (uint8_t)led_LinearInterpolation(a, b, prgs);
+}
+
+//-------------------------------------------------------------------------------------------------
+//--- Simple Brightness Indication ----------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------
+
+static void uwf_IterateIndication_Brightness(leds_p p_leds)
+{
+    uint8_t value   = 0;
+    double  percent = (1.0 * p_leds->time.duration / p_leds->time.interval);
+
+    if ((p_leds->dst != p_leds->src) && (p_leds->time.duration < p_leds->time.interval))
+    {
+        value = uwf_SmoothBrightnessTransition(p_leds->src, p_leds->dst, percent);
+        p_leds->time.duration += p_leds->time.delta;
+    }
+    else
+    {
+        value           = p_leds->dst;
+        p_leds->src     = p_leds->dst;
+        p_leds->command = LED_CMD_EMPTY;
+    }
+    p_leds->fp_set(value);
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void uwf_SetIndication_Brightness(leds_p p_leds, led_message_t * p_msg)
+{
+    enum
+    {
+        MIN_TRANSITION_TIME_MS = 1000,
+    };
+
+    p_leds->command = p_msg->command;
+    p_leds->dst     = p_msg->dst_color.a;
+
+    /* Set the default tick interval to 30 ms */
+    p_leds->tick.interval = 3;
+    p_leds->tick.counter  = p_leds->tick.interval;
+    p_leds->time.delta    = (p_leds->tick.interval * LED_TASK_TICK_MS);
+
+    /* Determine the SRC brightness */
+    p_leds->src = p_msg->src_color.a;
+    if (0 == p_msg->src_color.a)
+    {
+        p_leds->src = p_leds->fp_get();
+    }
+
+    /* Calculate the timer parameters */
+    if ((MIN_TRANSITION_TIME_MS < p_msg->interval) && (p_msg->duration < p_msg->interval))
+    {
+        /* Use timings from the request */
+        p_leds->time.interval = p_msg->interval;
+        p_leds->time.duration = p_msg->duration;
+    }
+    else
+    {
+        /* Use default timings */
+        p_leds->time.interval = MIN_TRANSITION_TIME_MS;
+        p_leds->time.duration = 0;
+    }
+    p_leds->fp_iterate();
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void ultraviolet_IterateIndication_Brightness(void)
+{
+    uwf_IterateIndication_Brightness(&gLedsUwf.u);
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void white_IterateIndication_Brightness(void)
+{
+    uwf_IterateIndication_Brightness(&gLedsUwf.w);
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void fito_IterateIndication_Brightness(void)
+{
+    uwf_IterateIndication_Brightness(&gLedsUwf.f);
+}
+
+//-------------------------------------------------------------------------------------------------
+//--- Sine Brightness Indication ------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------
+
+static void uwf_IterateIndication_Sine(leds_p p_leds)
+{
+    uint8_t value  = 0;
+    double  percent = (1.0 * p_leds->time.duration / p_leds->time.interval);
+
+    if ((p_leds->dst != p_leds->src) && (p_leds->time.duration < p_leds->time.interval))
+    {
+        percent = sin(percent * gPi);
+        value   = uwf_SmoothBrightnessTransition(p_leds->src, p_leds->dst, percent);
+        p_leds->time.duration += p_leds->time.delta;
+    }
+    else
+    {
+        value           = p_leds->src;
+        p_leds->dst     = p_leds->src;
+        p_leds->command = LED_CMD_EMPTY;
+    }
+    p_leds->fp_set(value);
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void uwf_SetIndication_Sine(leds_p p_leds, led_message_t * p_msg)
+{
+    enum
+    {
+        MIN_TRANSITION_TIME_MS = 1000,
+    };
+
+    p_leds->command = p_msg->command;
+    p_leds->dst     = p_msg->dst_color.a;
+
+    /* Set the default tick interval to 30 ms */
+    p_leds->tick.interval = 3;
+    p_leds->tick.counter  = p_leds->tick.interval;
+    p_leds->time.delta    = (p_leds->tick.interval * LED_TASK_TICK_MS);
+
+    /* Determine the SRC brightness */
+    p_leds->src = 0;
+    if (0 == p_msg->src_color.a)
+    {
+        p_leds->src = p_leds->fp_get();
+    }
+    else
+    {
+        p_leds->src = p_msg->src_color.a;
+    }
+
+    /* Calculate the timer parameters */
+    if ((MIN_TRANSITION_TIME_MS < p_msg->interval) && (p_msg->duration < p_msg->interval))
+    {
+        /* Use timings from the request */
+        p_leds->time.interval = p_msg->interval;
+        p_leds->time.duration = p_msg->duration;
+    }
+    else
+    {
+        /* Use default timings */
+        p_leds->time.interval = MIN_TRANSITION_TIME_MS;
+        p_leds->time.duration = 0;
+    }
+    p_leds->fp_iterate();
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void ultraviolet_IterateIndication_Sine(void)
+{
+    uwf_IterateIndication_Sine(&gLedsUwf.u);
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void white_IterateIndication_Sine(void)
+{
+    uwf_IterateIndication_Sine(&gLedsUwf.w);
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void fito_IterateIndication_Sine(void)
+{
+    uwf_IterateIndication_Sine(&gLedsUwf.f);
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void uwf_ProcessMsg(led_message_t * p_msg)
+{
+    switch (p_msg->command)
+    {
+        case LED_CMD_UV_INDICATE_BRIGHTNESS:
+            gLedsUwf.u.fp_iterate = ultraviolet_IterateIndication_Brightness;
+            uwf_SetIndication_Brightness(&gLedsUwf.u, p_msg);
+            break;
+        case LED_CMD_UV_INDICATE_SINE:
+            gLedsUwf.u.fp_iterate = ultraviolet_IterateIndication_Sine;
+            uwf_SetIndication_Sine(&gLedsUwf.u, p_msg);
+            break;
+        case LED_CMD_W_INDICATE_BRIGHTNESS:
+            gLedsUwf.w.fp_iterate = white_IterateIndication_Brightness;
+            uwf_SetIndication_Brightness(&gLedsUwf.w, p_msg);
+            break;
+        case LED_CMD_W_INDICATE_SINE:
+            gLedsUwf.w.fp_iterate = white_IterateIndication_Sine;
+            uwf_SetIndication_Sine(&gLedsUwf.w, p_msg);
+            break;
+        case LED_CMD_F_INDICATE_BRIGHTNESS:
+            gLedsUwf.f.fp_iterate = fito_IterateIndication_Brightness;
+            uwf_SetIndication_Brightness(&gLedsUwf.f, p_msg);
+            break;
+        case LED_CMD_F_INDICATE_SINE:
+            gLedsUwf.f.fp_iterate = fito_IterateIndication_Sine;
+            uwf_SetIndication_Sine(&gLedsUwf.f, p_msg);
+            break;
+        default:
+            break;
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void uwf_ProcessLeds(leds_p p_leds)
+{
+    if (LED_CMD_EMPTY != p_leds->command)
+    {
+        p_leds->tick.counter--;
+        if (0 == p_leds->tick.counter)
+        {
+            if (NULL != p_leds->fp_iterate)
+            {
+                p_leds->fp_iterate();
+            }
+            p_leds->tick.counter = p_leds->tick.interval;
+        }
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void uwf_Process(void)
+{
+    uwf_ProcessLeds(&gLedsUwf.u);
+    uwf_ProcessLeds(&gLedsUwf.w);
+    uwf_ProcessLeds(&gLedsUwf.f);
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void vUWF_Task(void * pvParameters)
+{
+    enum
+    {
+        INIT_DELAY = 50,
+    };
+    BaseType_t    status = pdFAIL;
+    led_message_t msg    = {0};
+
+    LED_LOGI("LED UWF Task started...");
+
+    LED_Strip_UWF_Init();
+    vTaskDelay(pdMS_TO_TICKS(INIT_DELAY));
+
+    gLedsUwf.u.fp_get = LED_Strip_U_GetBrightness;
+    gLedsUwf.u.fp_set = LED_Strip_U_SetBrightness;
+    gLedsUwf.w.fp_get = LED_Strip_W_GetBrightness;
+    gLedsUwf.w.fp_set = LED_Strip_W_SetBrightness;
+    gLedsUwf.f.fp_get = LED_Strip_F_GetBrightness;
+    gLedsUwf.f.fp_set = LED_Strip_F_SetBrightness;
+
+    while (FW_TRUE)
+    {
+        status = xQueueReceive(gLedsUwfQueue, (void *)&msg, pdMS_TO_TICKS(LED_TASK_TICK_MS));
+
+        if (pdTRUE == status)
+        {
+            uwf_ProcessMsg(&msg);
+        }
+        else
+        {
+            uwf_Process();
         }
     }
 }
@@ -747,9 +1068,11 @@ static void vLED_Task(void * pvParameters)
 
 void LED_Task_Init(void)
 {
-    gLedQueue = xQueueCreate(20, sizeof(led_message_t));
+    gLedsRgbQueue = xQueueCreate(20, sizeof(led_message_t));
+    gLedsUwfQueue = xQueueCreate(20, sizeof(led_message_t));
 
-    (void)xTaskCreatePinnedToCore(vLED_Task, "LED", 4096, NULL, 10, NULL, CORE1);
+    (void)xTaskCreatePinnedToCore(vRGB_Task, "LED RGB", 4096, NULL, 10, NULL, CORE1);
+    (void)xTaskCreatePinnedToCore(vUWF_Task, "LED UWF", 4096, NULL, 10, NULL, CORE1);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -758,14 +1081,22 @@ void LED_Task_SendMsg(led_message_t * p_msg)
 {
     LED_LOGI
     (
-        "Msg->C:%d-S(%d.%d.%d)-D(%d.%d.%d)-I:%d",
+        "Msg->C:%d-S(%d.%d.%d.%d)-D(%d.%d.%d.%d)-I:%d",
         p_msg->command,
-        p_msg->src_color.r, p_msg->src_color.g, p_msg->src_color.b,
-        p_msg->dst_color.r, p_msg->dst_color.g, p_msg->dst_color.b,
+        p_msg->src_color.r, p_msg->src_color.g, p_msg->src_color.b, p_msg->src_color.a,
+        p_msg->dst_color.r, p_msg->dst_color.g, p_msg->dst_color.b, p_msg->dst_color.a,
         (int)p_msg->interval
     );
 
-    (void)xQueueSendToBack(gLedQueue, (void *)p_msg, (TickType_t)0);
+    if ((LED_CMD_RGB_INDICATE_COLOR <= p_msg->command) && 
+        (LED_CMD_RGB_SWITCH_OFF >= p_msg->command))
+    {
+        (void)xQueueSendToBack(gLedsRgbQueue, (void *)p_msg, (TickType_t)0);
+    }
+    else
+    {
+        (void)xQueueSendToBack(gLedsUwfQueue, (void *)p_msg, (TickType_t)0);
+    }
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -780,15 +1111,26 @@ void LED_Task_DetermineColor(led_message_t * p_msg, led_color_t * p_color)
     {
         switch (p_msg->command)
         {
-            case LED_CMD_INDICATE_RAINBOW:
-                led_RainbowColorTransition(&p_msg->src_color, &p_msg->dst_color, percent, p_color);
+            case LED_CMD_RGB_INDICATE_RAINBOW:
+                rgb_RainbowColorTransition(&p_msg->src_color, &p_msg->dst_color, percent, p_color);
                 break;
-            case LED_CMD_INDICATE_SINE:
+            case LED_CMD_RGB_INDICATE_SINE:
                 percent = sin(percent * gPi);
-                led_SmoothColorTransition(&p_msg->src_color, &p_msg->dst_color, percent, p_color);
+                rgb_SmoothColorTransition(&p_msg->src_color, &p_msg->dst_color, percent, p_color);
+                break;
+            case LED_CMD_UV_INDICATE_SINE:
+                /* No break */
+            case LED_CMD_W_INDICATE_SINE:
+                /* No break */
+            case LED_CMD_F_INDICATE_SINE:
+                percent = sin(percent * gPi);
+                p_color->a = uwf_SmoothBrightnessTransition
+                             (p_msg->src_color.a, p_msg->dst_color.a, percent);
                 break;
             default:
-                led_SmoothColorTransition(&p_msg->src_color, &p_msg->dst_color, percent, p_color);
+                rgb_SmoothColorTransition(&p_msg->src_color, &p_msg->dst_color, percent, p_color);
+                p_color->a = uwf_SmoothBrightnessTransition
+                             (p_msg->src_color.a, p_msg->dst_color.a, percent);
                 break;
         }
     }
@@ -803,16 +1145,40 @@ void LED_Task_GetCurrentColor(led_color_t * p_color)
 }
 
 //-------------------------------------------------------------------------------------------------
+
+uint8_t LED_Task_GetCurrentUltraViolet(void)
+{
+    /* This call is not thread safe but this is acceptable */
+    return LED_Strip_U_GetBrightness();
+}
+
+//-------------------------------------------------------------------------------------------------
+
+uint8_t LED_Task_GetCurrentWhite(void)
+{
+    /* This call is not thread safe but this is acceptable */
+    return LED_Strip_W_GetBrightness();
+}
+
+//-------------------------------------------------------------------------------------------------
+
+uint8_t LED_Task_GetCurrentFito(void)
+{
+    /* This call is not thread safe but this is acceptable */
+    return LED_Strip_F_GetBrightness();
+}
+
+//-------------------------------------------------------------------------------------------------
 //--- Tests ---------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------
 
-static void led_Test_Color(void)
+static void rgb_Test_Color(void)
 {
     led_message_t led_msg = {0};
 
     /* Default transition to DST color about 3000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command         = LED_CMD_INDICATE_COLOR;
+    led_msg.command         = LED_CMD_RGB_INDICATE_COLOR;
     /* To - Red */
     led_msg.dst_color.r     = 255;
     led_msg.dst_color.g     = 0;
@@ -827,7 +1193,7 @@ static void led_Test_Color(void)
 
     /* Transition to DST color about 8000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command         = LED_CMD_INDICATE_COLOR;
+    led_msg.command         = LED_CMD_RGB_INDICATE_COLOR;
     /* To - Green */
     led_msg.dst_color.r     = 0;
     led_msg.dst_color.g     = 255;
@@ -845,7 +1211,7 @@ static void led_Test_Color(void)
 
     /* Transition from SRC to DST color about 8000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command         = LED_CMD_INDICATE_COLOR;
+    led_msg.command         = LED_CMD_RGB_INDICATE_COLOR;
     /* To - Red */
     led_msg.dst_color.r     = 255;
     led_msg.dst_color.g     = 0;
@@ -863,7 +1229,7 @@ static void led_Test_Color(void)
 
     /* Transition from SRC to DST color about 4000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command         = LED_CMD_INDICATE_COLOR;
+    led_msg.command         = LED_CMD_RGB_INDICATE_COLOR;
     /* To - Red */
     led_msg.dst_color.r     = 255;
     led_msg.dst_color.g     = 0;
@@ -882,12 +1248,12 @@ static void led_Test_Color(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_Test_RgbCirculation(void)
+static void rgb_Test_RgbCirculation(void)
 {
     led_message_t led_msg = {0};
 
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command         = LED_CMD_INDICATE_RGB_CIRCULATION;
+    led_msg.command         = LED_CMD_RGB_INDICATE_RGB_CIRCULATION;
     /* To - Ignored */
     led_msg.dst_color.r     = 0;
     led_msg.dst_color.g     = 0;
@@ -903,12 +1269,12 @@ static void led_Test_RgbCirculation(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_Test_Fade(void)
+static void rgb_Test_Fade(void)
 {
     led_message_t led_msg = {0};
 
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command         = LED_CMD_INDICATE_FADE;
+    led_msg.command         = LED_CMD_RGB_INDICATE_FADE;
     /* To - Some */
     led_msg.dst_color.r     = 160;
     led_msg.dst_color.g     = 0;
@@ -924,12 +1290,12 @@ static void led_Test_Fade(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_Test_PingPong(void)
+static void rgb_Test_PingPong(void)
 {
     led_message_t led_msg = {0};
 
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command         = LED_CMD_INDICATE_PINGPONG;
+    led_msg.command         = LED_CMD_RGB_INDICATE_PINGPONG;
     /* To - Some */
     led_msg.dst_color.r     = 160;
     led_msg.dst_color.g     = 0;
@@ -945,13 +1311,13 @@ static void led_Test_PingPong(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_Test_RainbowCirculation(void)
+static void rgb_Test_RainbowCirculation(void)
 {
     led_message_t led_msg = {0};
 
     /* Static Rainbow */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command         = LED_CMD_INDICATE_RAINBOW_CIRCULATION;
+    led_msg.command         = LED_CMD_RGB_INDICATE_RAINBOW_CIRCULATION;
     /* To - Some */
     led_msg.dst_color.r     = 90;
     led_msg.dst_color.g     = 90;
@@ -966,7 +1332,7 @@ static void led_Test_RainbowCirculation(void)
 
     /* Rainbow Circulation */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command         = LED_CMD_INDICATE_RAINBOW_CIRCULATION;
+    led_msg.command         = LED_CMD_RGB_INDICATE_RAINBOW_CIRCULATION;
     /* To - Some */
     led_msg.dst_color.r     = 0;
     led_msg.dst_color.g     = 0;
@@ -982,13 +1348,13 @@ static void led_Test_RainbowCirculation(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_Test_Rainbow(void)
+static void rgb_Test_Rainbow(void)
 {
     led_message_t led_msg = {0};
 
     /* Transition from SRC to DST color about 15000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command         = LED_CMD_INDICATE_RAINBOW;
+    led_msg.command         = LED_CMD_RGB_INDICATE_RAINBOW;
     /* To - Green */
     led_msg.dst_color.r     = 0;
     led_msg.dst_color.g     = 255;
@@ -1006,7 +1372,7 @@ static void led_Test_Rainbow(void)
 
     /* Transition from SRC to DST color about 15000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command         = LED_CMD_INDICATE_RAINBOW;
+    led_msg.command         = LED_CMD_RGB_INDICATE_RAINBOW;
     /* To - Red */
     led_msg.dst_color.r     = 255;
     led_msg.dst_color.g     = 0;
@@ -1024,7 +1390,7 @@ static void led_Test_Rainbow(void)
 
     /* Transition from SRC to DST color about 15000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command         = LED_CMD_INDICATE_RAINBOW;
+    led_msg.command         = LED_CMD_RGB_INDICATE_RAINBOW;
     /* To - Green */
     led_msg.dst_color.r     = 0;
     led_msg.dst_color.g     = 255;
@@ -1042,7 +1408,7 @@ static void led_Test_Rainbow(void)
 
     /* Transition from SRC to DST color about 15000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command         = LED_CMD_INDICATE_RAINBOW;
+    led_msg.command         = LED_CMD_RGB_INDICATE_RAINBOW;
     /* To - Red */
     led_msg.dst_color.r     = 255;
     led_msg.dst_color.g     = 0;
@@ -1060,7 +1426,7 @@ static void led_Test_Rainbow(void)
 
     /* Transition from SRC to DST color about 15000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command         = LED_CMD_INDICATE_RAINBOW;
+    led_msg.command         = LED_CMD_RGB_INDICATE_RAINBOW;
     /* To - Red */
     led_msg.dst_color.r     = 255;
     led_msg.dst_color.g     = 0;
@@ -1079,12 +1445,12 @@ static void led_Test_Rainbow(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_Test_Sine(void)
+static void rgb_Test_Sine(void)
 {
     led_message_t led_msg = {0};
 
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command         = LED_CMD_INDICATE_SINE;
+    led_msg.command         = LED_CMD_RGB_INDICATE_SINE;
     /* To - Some */
     led_msg.dst_color.r     = 0;
     led_msg.dst_color.g     = 255;
@@ -1103,7 +1469,7 @@ static void led_Test_Sine(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void led_Test_DayNight(void)
+static void rgb_Test_DayNight(void)
 {
     #define RGBA(rv,gv,bv,av) {.r=rv,.g=gv,.b=bv,.a=av}
 
@@ -1132,13 +1498,13 @@ static void led_Test_DayNight(void)
 
     time_point_t points[] =
     {
-        {   0,  429, RGBA(  0,   0,  32, 1), RGBA(  0,   0,  44, 1), LED_CMD_INDICATE_COLOR},
-        { 429,  442, RGBA(  0,   0,  44, 0), RGBA( 64,   0,  56, 1), LED_CMD_INDICATE_RAINBOW},
-        { 442,  505, RGBA( 64,   0,  56, 0), RGBA(220, 220,   0, 1), LED_CMD_INDICATE_RAINBOW},
-        { 505, 1076, RGBA(220, 220,   0, 1), RGBA(255, 255, 255, 1), LED_CMD_INDICATE_SINE},
-        {1076, 1140, RGBA(220, 220,   0, 1), RGBA( 64,   0,  56, 0), LED_CMD_INDICATE_RAINBOW},
-        {1140, 1153, RGBA( 64,   0,  56, 1), RGBA(  0,   0,  44, 0), LED_CMD_INDICATE_RAINBOW},
-        {1153, 1440, RGBA(  0,   0,  44, 1), RGBA(  0,   0,  32, 1), LED_CMD_INDICATE_COLOR},
+        {   0,  429, RGBA(  0,   0,  32, 1), RGBA(  0,   0,  44, 1), LED_CMD_RGB_INDICATE_COLOR},
+        { 429,  442, RGBA(  0,   0,  44, 0), RGBA( 64,   0,  56, 1), LED_CMD_RGB_INDICATE_RAINBOW},
+        { 442,  505, RGBA( 64,   0,  56, 0), RGBA(220, 220,   0, 1), LED_CMD_RGB_INDICATE_RAINBOW},
+        { 505, 1076, RGBA(220, 220,   0, 1), RGBA(255, 255, 255, 1), LED_CMD_RGB_INDICATE_SINE},
+        {1076, 1140, RGBA(220, 220,   0, 1), RGBA( 64,   0,  56, 0), LED_CMD_RGB_INDICATE_RAINBOW},
+        {1140, 1153, RGBA( 64,   0,  56, 1), RGBA(  0,   0,  44, 0), LED_CMD_RGB_INDICATE_RAINBOW},
+        {1153, 1440, RGBA(  0,   0,  44, 1), RGBA(  0,   0,  32, 1), LED_CMD_RGB_INDICATE_COLOR},
     };
 
     for (p = 0; p < (sizeof(points)/sizeof(time_point_t)); p++)
@@ -1158,16 +1524,164 @@ static void led_Test_DayNight(void)
 
 //-------------------------------------------------------------------------------------------------
 
+static void uwf_Test_Brightness(void)
+{
+    led_message_t led_msg = {0};
+
+    /* Transition to DST UV brightness about 3000 ms */
+    memset(&led_msg, 0, sizeof(led_msg));
+    led_msg.command     = LED_CMD_UV_INDICATE_BRIGHTNESS;
+    led_msg.dst_color.a = 100;
+    led_msg.src_color.a = 0;
+    led_msg.interval    = 3000;
+    led_msg.duration    = 0;
+    LED_Task_SendMsg(&led_msg);
+    vTaskDelay(pdMS_TO_TICKS(4000));
+
+    /* Transition to DST UV brightness about 8000 ms */
+    memset(&led_msg, 0, sizeof(led_msg));
+    led_msg.command     = LED_CMD_UV_INDICATE_BRIGHTNESS;
+    led_msg.dst_color.a = 0;
+    led_msg.src_color.a = 0;
+    led_msg.interval    = 8000;
+    led_msg.duration    = 0;
+    LED_Task_SendMsg(&led_msg);
+    vTaskDelay(pdMS_TO_TICKS(9000));
+
+    /* Transition to DST W brightness about 3000 ms */
+    memset(&led_msg, 0, sizeof(led_msg));
+    led_msg.command     = LED_CMD_W_INDICATE_BRIGHTNESS;
+    led_msg.dst_color.a = 100;
+    led_msg.src_color.a = 0;
+    led_msg.interval    = 3000;
+    led_msg.duration    = 0;
+    LED_Task_SendMsg(&led_msg);
+    vTaskDelay(pdMS_TO_TICKS(4000));
+
+    /* Transition to DST W brightness about 8000 ms */
+    memset(&led_msg, 0, sizeof(led_msg));
+    led_msg.command     = LED_CMD_W_INDICATE_BRIGHTNESS;
+    led_msg.dst_color.a = 0;
+    led_msg.src_color.a = 0;
+    led_msg.interval    = 8000;
+    led_msg.duration    = 0;
+    LED_Task_SendMsg(&led_msg);
+    vTaskDelay(pdMS_TO_TICKS(9000));
+
+    /* Transition to DST F brightness about 3000 ms */
+    memset(&led_msg, 0, sizeof(led_msg));
+    led_msg.command     = LED_CMD_F_INDICATE_BRIGHTNESS;
+    led_msg.dst_color.a = 100;
+    led_msg.src_color.a = 0;
+    led_msg.interval    = 3000;
+    led_msg.duration    = 0;
+    LED_Task_SendMsg(&led_msg);
+    vTaskDelay(pdMS_TO_TICKS(4000));
+
+    /* Transition to DST F brightness about 8000 ms */
+    memset(&led_msg, 0, sizeof(led_msg));
+    led_msg.command     = LED_CMD_F_INDICATE_BRIGHTNESS;
+    led_msg.dst_color.a = 0;
+    led_msg.src_color.a = 0;
+    led_msg.interval    = 8000;
+    led_msg.duration    = 0;
+    LED_Task_SendMsg(&led_msg);
+    vTaskDelay(pdMS_TO_TICKS(9000));
+
+    /* Transition to DST UV/W/F brightness about 3000 ms */
+    memset(&led_msg, 0, sizeof(led_msg));
+    led_msg.dst_color.a = 100;
+    led_msg.src_color.a = 0;
+    led_msg.interval    = 3000;
+    led_msg.duration    = 0;
+    led_msg.command     = LED_CMD_UV_INDICATE_BRIGHTNESS;
+    LED_Task_SendMsg(&led_msg);
+    led_msg.command     = LED_CMD_W_INDICATE_BRIGHTNESS;
+    LED_Task_SendMsg(&led_msg);
+    led_msg.command     = LED_CMD_F_INDICATE_BRIGHTNESS;
+    LED_Task_SendMsg(&led_msg);
+    vTaskDelay(pdMS_TO_TICKS(4000));
+
+    /* Transition to DST UV/W/F brightness about 8000 ms */
+    memset(&led_msg, 0, sizeof(led_msg));
+    led_msg.dst_color.a = 0;
+    led_msg.src_color.a = 0;
+    led_msg.interval    = 8000;
+    led_msg.duration    = 0;
+    led_msg.command     = LED_CMD_UV_INDICATE_BRIGHTNESS;
+    LED_Task_SendMsg(&led_msg);
+    led_msg.command     = LED_CMD_W_INDICATE_BRIGHTNESS;
+    LED_Task_SendMsg(&led_msg);
+    led_msg.command     = LED_CMD_F_INDICATE_BRIGHTNESS;
+    LED_Task_SendMsg(&led_msg);
+    vTaskDelay(pdMS_TO_TICKS(9000));
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void uwf_Test_Sine(void)
+{
+    led_message_t led_msg = {0};
+
+    /* Transition to DST UV brightness about 5000 ms */
+    memset(&led_msg, 0, sizeof(led_msg));
+    led_msg.command     = LED_CMD_UV_INDICATE_SINE;
+    led_msg.dst_color.a = 200;
+    led_msg.src_color.a = 0;
+    led_msg.interval    = 5000;
+    led_msg.duration    = 0;
+    LED_Task_SendMsg(&led_msg);
+    vTaskDelay(pdMS_TO_TICKS(6000));
+
+    /* Transition to DST W brightness about 5000 ms */
+    memset(&led_msg, 0, sizeof(led_msg));
+    led_msg.command     = LED_CMD_W_INDICATE_SINE;
+    led_msg.dst_color.a = 100;
+    led_msg.src_color.a = 0;
+    led_msg.interval    = 5000;
+    led_msg.duration    = 0;
+    LED_Task_SendMsg(&led_msg);
+    vTaskDelay(pdMS_TO_TICKS(6000));
+
+    /* Transition to DST F brightness about 5000 ms */
+    memset(&led_msg, 0, sizeof(led_msg));
+    led_msg.command     = LED_CMD_F_INDICATE_SINE;
+    led_msg.dst_color.a = 150;
+    led_msg.src_color.a = 0;
+    led_msg.interval    = 5000;
+    led_msg.duration    = 0;
+    LED_Task_SendMsg(&led_msg);
+    vTaskDelay(pdMS_TO_TICKS(6000));
+
+    /* Transition to DST UV/W/F brightness about 3000 ms */
+    memset(&led_msg, 0, sizeof(led_msg));
+    led_msg.dst_color.a = 100;
+    led_msg.src_color.a = 0;
+    led_msg.interval    = 3000;
+    led_msg.duration    = 0;
+    led_msg.command     = LED_CMD_UV_INDICATE_SINE;
+    LED_Task_SendMsg(&led_msg);
+    led_msg.command     = LED_CMD_W_INDICATE_SINE;
+    LED_Task_SendMsg(&led_msg);
+    led_msg.command     = LED_CMD_F_INDICATE_SINE;
+    LED_Task_SendMsg(&led_msg);
+    vTaskDelay(pdMS_TO_TICKS(4000));
+}
+
+//-------------------------------------------------------------------------------------------------
+
 void LED_Task_Test(void)
 {
-    led_Test_Color();
-    led_Test_RgbCirculation();
-    led_Test_Fade();
-    led_Test_PingPong();
-    led_Test_RainbowCirculation();
-    led_Test_Rainbow();
-    led_Test_Sine();
-    led_Test_DayNight();
+    rgb_Test_Color();
+    rgb_Test_RgbCirculation();
+    rgb_Test_Fade();
+    rgb_Test_PingPong();
+    rgb_Test_RainbowCirculation();
+    rgb_Test_Rainbow();
+    rgb_Test_Sine();
+    rgb_Test_DayNight();
+    uwf_Test_Brightness();
+    uwf_Test_Sine();
 }
 
 //-------------------------------------------------------------------------------------------------
