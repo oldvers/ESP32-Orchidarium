@@ -216,7 +216,7 @@ static rgb_point_t gRgbPoints[] =
 /*       ---              ---------              ---        <---- Shortest Day (UV/W min)   */
 /*    ---     ------------         ------------     ---                                     */
 /* -----------                                 -----------                                  */
-/* Rise ----------------------------------------------> Set                                 */
+/* Day -----------------------------------------------> Evening Golden Hour                 */
 /*                                                                                          */
 /* duration = (evening_golden_hour - day);                                                  */
 /* percent = (duration-SHORTEST_DAY_DURATION)/(LONGEST_DAY_DURATION-SHORTEST_DAY_DURATION); */
@@ -594,12 +594,12 @@ static void time_SunRgb(time_t curr_t, FW_BOOLEAN pre_tx, led_message_p p_rgb_ms
 
     for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
     {
-        /* Find the offset inside the time range */
+        /* Find the appropriate time point */
         if ((curr_t >= gTimePoints[point].start) && (NULL != gRgbPoints[point].transition))
         {
-            interval = (gTimePoints[point].interval * 1000);
+            interval = (gRgbPoints[point].interval * 1000);
             duration = ((curr_t - gTimePoints[point].start) * 1000);
-            TIME_LOGI("[%d] - Interval/Duration    : %12lu - %lu", point, interval, duration);
+            TIME_LOGI("[%d] - Interval/Duration RGB: %12lu - %lu", point, interval, duration);
 
             /* Prepare the indication message */
             p_rgb_msg->command         = gRgbPoints[point].transition->cmd;
@@ -616,7 +616,7 @@ static void time_SunRgb(time_t curr_t, FW_BOOLEAN pre_tx, led_message_p p_rgb_ms
                 pre_msg.interval        = TRANSITION_INTERVAL;
                 LED_Task_SendMsg(&pre_msg);
             }
-
+            /* Skip the rest of time points */
             break;
         }
     }
@@ -644,12 +644,12 @@ static void time_SunUw
 
     for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
     {
-        /* Find the offset inside the time range */
+        /* Find the appropriate time point */
         if ((curr_t >= gTimePoints[point].start) && (NULL != gUwPoints[point].transition))
         {
-            interval = (gTimePoints[point].interval * 1000);
+            interval = (gUwPoints[point].interval * 1000);
             duration = ((curr_t - gTimePoints[point].start) * 1000);
-            TIME_LOGI("[%d] - Interval/Duration    : %12lu - %lu", point, interval, duration);
+            TIME_LOGI("[%d] - Interval/Duration U/W: %12lu - %lu", point, interval, duration);
 
             /* Prepare the indication message */
             p_u_msg->command     = gUwPoints[point].transition->u_cmd;
@@ -677,7 +677,7 @@ static void time_SunUw
                 pre_msg.dst_color.a = color.a;
                 LED_Task_SendMsg(&pre_msg);
             }
-
+            /* Skip the rest of time points */
             break;
         }
     }
@@ -729,9 +729,9 @@ static void time_Sun(time_t t, struct tm * p_dt, char * p_str, FW_BOOLEAN pre_tr
 
 static void time_SetAlarm(time_t t, struct tm * p_dt, char * p_str)
 {
-    char    string[28]   = {0};
-    time_t  current_time = t;
-    int32_t point        = 0;
+    char    string[TIME_STR_MAX_LEN] = {0};
+    time_t  current_time             = t;
+    int32_t point                    = 0;
 
     for (point = 0; point < TIME_IDX_MAX; point++)
     {
@@ -817,13 +817,13 @@ static void vTime_Task(void * pvParameters)
     {
         RETRY_COUNT = 20,
     };
-    BaseType_t     status     = pdFAIL;
-    time_message_t msg        = {0};
-    time_t         now        = 0;
-    struct tm      datetime   = {0};
-    char           string[28] = {0};
-    uint32_t       retry      = 0;
-    static uint8_t sync_ok    = FW_FALSE;
+    BaseType_t     status                   = pdFAIL;
+    time_message_t msg                      = {0};
+    time_t         now                      = 0;
+    struct tm      datetime                 = {0};
+    char           string[TIME_STR_MAX_LEN] = {0};
+    uint32_t       retry                    = 0;
+    static uint8_t sync_ok                  = FW_FALSE;
 
     /* Initialize the SNTP client which gets the time periodicaly */
     TIME_LOGI("Time Task Started...");

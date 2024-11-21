@@ -80,7 +80,7 @@ void LED_Strip_RGB_Update(void)
 
 //-------------------------------------------------------------------------------------------------
 
-void LED_Strip_RGB_SetPixelColor(uint16_t pixel, led_color_t * p_color)
+void LED_Strip_RGB_SetPixelColor(uint16_t pixel, led_color_p p_color)
 {
     uint32_t pos = pixel * 3;
 
@@ -120,7 +120,7 @@ void LED_Strip_RGB_Clear(void)
 
 //-------------------------------------------------------------------------------------------------
 
-void LED_Strip_RGB_SetColor(led_color_t * p_color)
+void LED_Strip_RGB_SetColor(led_color_p p_color)
 {
     uint32_t pos = 0;
 
@@ -134,7 +134,7 @@ void LED_Strip_RGB_SetColor(led_color_t * p_color)
 
 //-------------------------------------------------------------------------------------------------
 
-void LED_Strip_RGB_GetAverageColor(led_color_t * p_color)
+void LED_Strip_RGB_GetAverageColor(led_color_p p_color)
 {
     uint16_t r = 0, g = 0, b = 0;
     uint32_t pos = 0;

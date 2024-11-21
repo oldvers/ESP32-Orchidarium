@@ -198,8 +198,6 @@
         }
         for (i = 0; i < 24; i++)
         {
-            //t = (view.getInt16(offs, true) * 0.01);
-            //ts[i] = t.toFixed(2);
             ts[i] = (view.getInt16(offs, true) * 0.01).toFixed(2);
             offs += 2;
         }

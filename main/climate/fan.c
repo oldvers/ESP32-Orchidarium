@@ -22,7 +22,16 @@ enum
 
 static mcpwm_cmpr_handle_t gComparator = NULL;
 static mcpwm_gen_handle_t  gGenerator  = NULL;
-static uint8_t             gSpeed      = 0;
+static fan_speed_t         gSpeed      = FAN_SPEED_NONE;
+
+static uint8_t gSpeeds[] =
+{
+    [FAN_SPEED_NONE]   = 0,
+    [FAN_SPEED_LOW]    = 75,
+    [FAN_SPEED_MEDIUM] = 106,
+    [FAN_SPEED_HIGH]   = 178,
+    [FAN_SPEED_FULL]   = 255,
+};
 
 //-------------------------------------------------------------------------------------------------
 
@@ -107,23 +116,23 @@ void FAN_Init(void)
 
 //-------------------------------------------------------------------------------------------------
 
-void FAN_SetSpeed(uint8_t value)
+void FAN_SetSpeed(fan_speed_t value)
 {
     uint32_t duty = 0;
 
     gSpeed = value;
 
-    if (0 == value)
+    if (FAN_SPEED_NONE == value)
     {
         ESP_ERROR_CHECK(mcpwm_generator_set_force_level(gGenerator, 0, true));
     }
-    else if (UINT8_MAX == value)
+    else if (FAN_SPEED_FULL == value)
     {
         ESP_ERROR_CHECK(mcpwm_generator_set_force_level(gGenerator, 1, true));
     }
     else
     {
-        duty = (value * FAN_MCPWM_PERIOD / UINT8_MAX);
+        duty = (gSpeeds[value] * FAN_MCPWM_PERIOD / UINT8_MAX);
         ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(gComparator, duty));
         ESP_ERROR_CHECK(mcpwm_generator_set_force_level(gGenerator, -1, true));
     }
@@ -131,7 +140,7 @@ void FAN_SetSpeed(uint8_t value)
 
 //-------------------------------------------------------------------------------------------------
 
-uint8_t FAN_GetSpeed(void)
+fan_speed_t FAN_GetSpeed(void)
 {
     return gSpeed;
 }

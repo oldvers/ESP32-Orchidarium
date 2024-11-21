@@ -15,10 +15,7 @@
 #include "wifi_task.h"
 #include "led_task.h"
 #include "time_task.h"
-
-#include "led_strip_uwf.h"
-#include "fan.h"
-#include "humidifier.h"
+#include "climate_task.h"
 
 //-------------------------------------------------------------------------------------------------
 
@@ -68,11 +65,6 @@ enum
     MODE_COLOR                    = 1,
 };
 
-enum
-{
-    DAY_MEASUREMENTS_COUNT = 24,
-};
-
 #pragma pack(push, 1)
 
 typedef struct
@@ -102,12 +94,7 @@ typedef struct
     wifi_string_t datetime;
 } ctrl_status_t;
 
-typedef struct
-{
-    uint32_t pressure[DAY_MEASUREMENTS_COUNT];
-    uint16_t temperature[DAY_MEASUREMENTS_COUNT];
-    uint16_t humidity[DAY_MEASUREMENTS_COUNT];
-} ctrl_day_measmts_t;
+typedef climate_day_measurements_t ctrl_day_measmts_t;
 
 typedef struct
 {
@@ -381,9 +368,10 @@ static void ctrl_GetStatus(ctrl_req_p p_req, ctrl_rsp_p p_rsp, uint16_t * p_rsp_
     {
         MAX_DATETIME_LEN = sizeof(p_rsp->status.datetime.data),
     };
-    led_color_t color    = {0};
-    time_t      now      = 0;
-    struct tm   datetime = {0};
+    climate_measurements_t meas     = {0};
+    led_color_t            color    = {0};
+    time_t                 now      = 0;
+    struct tm              datetime = {0};
 
     time(&now);
     localtime_r(&now, &datetime);
@@ -399,17 +387,18 @@ static void ctrl_GetStatus(ctrl_req_p p_req, ctrl_rsp_p p_rsp, uint16_t * p_rsp_
         p_rsp->status.mode = MODE_COLOR;
     }
     LED_Task_GetCurrentColor(&color);
-    p_rsp->status.color.r         = color.r;
-    p_rsp->status.color.g         = color.g;
-    p_rsp->status.color.b         = color.b;
-    p_rsp->status.ultraviolet     = LED_Task_GetCurrentUltraViolet();
-    p_rsp->status.white           = LED_Task_GetCurrentWhite();
-    p_rsp->status.fito            = LED_Task_GetCurrentFito();
-    p_rsp->status.fan             = 1; /* TODO: FAN_GetSpeed(); */
-    p_rsp->status.humidifier      = 0; /* TODO: Get Humidifier On */
-    p_rsp->status.pressure        = 101270; /* TODO: Get Pressure */
-    p_rsp->status.temperature     = 2340; /* TODO: Get Temperature */
-    p_rsp->status.humidity        = 4360; /* TODO: Get Pressure */
+    p_rsp->status.color.r     = color.r;
+    p_rsp->status.color.g     = color.g;
+    p_rsp->status.color.b     = color.b;
+    p_rsp->status.ultraviolet = LED_Task_GetCurrentUltraViolet();
+    p_rsp->status.white       = LED_Task_GetCurrentWhite();
+    p_rsp->status.fito        = LED_Task_GetCurrentFito();
+    p_rsp->status.fan         = Climate_Task_GetFanSpeed();
+    p_rsp->status.humidifier  = Climate_Task_IsHumidifierOn();
+    Climate_Task_GetMeasurements(&meas);
+    p_rsp->status.pressure        = meas.pressure;
+    p_rsp->status.temperature     = meas.temperature;
+    p_rsp->status.humidity        = meas.humidity;
     p_rsp->status.datetime.length = strftime
                                     (
                                         p_rsp->status.datetime.data,
@@ -506,42 +495,12 @@ static void ctrl_SetFAN(ctrl_req_p p_req, ctrl_rsp_p p_rsp)
 {
     HTTPS_LOGI("The FAN received: %d", p_req->value);
 
-    /* TODO: led_message_t led_msg =
-    {
-        .command   = LED_CMD_INDICATE_COLOR,
-        .src_color = {.bytes = {0}},
-        .dst_color = {.r = data[1], .g = data[2], .b = data[3]},
-        .interval  = 0,
-        .duration  = 0
-    };
-    LED_Task_SendMsg(&led_msg); */
+    climate_message_t clt_msg = {0};
+    clt_msg.command = CLIMATE_CMD_FAN,
+    clt_msg.speed   = (fan_speed_t)(p_req->value % (FAN_SPEED_FULL + 1));
+    Climate_Task_SendMsg(&clt_msg);
 
-    switch (p_req->value)
-    {
-        case 0:
-            FAN_SetSpeed(FAN_SPEED_NONE);
-            break;
-        case 1:
-            FAN_SetSpeed(FAN_SPEED_LOW);
-            break;
-        case 2:
-            FAN_SetSpeed(FAN_SPEED_MEDIUM);
-            break;
-        case 3:
-            FAN_SetSpeed(FAN_SPEED_HIGH);
-            break;
-        case 4:
-            FAN_SetSpeed(FAN_SPEED_FULL);
-            break;
-        default:
-            FAN_SetSpeed(FAN_SPEED_NONE);
-            break;
-    }
-
-    time_message_t time_msg =
-    {
-        .command = TIME_CMD_SUN_DISABLE,
-    };
+    time_message_t time_msg = {.command = TIME_CMD_SUN_DISABLE};
     Time_Task_SendMsg(&time_msg);
 
     p_rsp->command = CMD_SET_FAN;
@@ -554,30 +513,12 @@ static void ctrl_SetHumidifier(ctrl_req_p p_req, ctrl_rsp_p p_rsp)
 {
     HTTPS_LOGI("The Humidifier received: %d", p_req->value);
 
-    /* TODO: led_message_t led_msg =
-    {
-        .command   = LED_CMD_INDICATE_COLOR,
-        .src_color = {.bytes = {0}},
-        .dst_color = {.r = data[1], .g = data[2], .b = data[3]},
-        .interval  = 0,
-        .duration  = 0
-    };
-    LED_Task_SendMsg(&led_msg); */
+    climate_message_t clt_msg = {0};
+    clt_msg.command = CLIMATE_CMD_HUMIDIFY,
+    clt_msg.on      = (bool)(p_req->value & 1);
+    Climate_Task_SendMsg(&clt_msg);
 
-    if (0 == p_req->value)
-    {
-        Humidifier_PowerOff();
-    }
-    else
-    {
-        Humidifier_PowerOn();
-        Humidifier_OnOffButtonClick();
-    }
-
-    time_message_t time_msg =
-    {
-        .command = TIME_CMD_SUN_DISABLE,
-    };
+    time_message_t time_msg = {.command = TIME_CMD_SUN_DISABLE};
     Time_Task_SendMsg(&time_msg);
 
     p_rsp->command = CMD_SET_HUMIDIFIER;
@@ -590,29 +531,9 @@ static void ctrl_GetDayMeasurements(ctrl_req_p p_req, ctrl_rsp_p p_rsp, uint16_t
 {
     HTTPS_LOGI("The Day Measurements request received");
 
-    double  value = 0.0;
-    uint8_t i     = 0;
-
     p_rsp->command = CMD_GET_DAY_MEASUREMENTS;
     p_rsp->result  = SUCCESS;
-    /* Pressure */
-    for (i = 0; i < DAY_MEASUREMENTS_COUNT; i++)
-    {
-        value = (1.0 * esp_random() / UINT32_MAX);
-        p_rsp->day_measmts.pressure[i] = (uint32_t)(90000.0 + value * 20000.0);
-    }
-    /* Temperature */
-    for (i = 0; i < DAY_MEASUREMENTS_COUNT; i++)
-    {
-        value = (1.0 * esp_random() / UINT32_MAX);
-        p_rsp->day_measmts.temperature[i] = (uint16_t)(value * 3500);
-    }
-    /* Humidity */
-    for (i = 0; i < DAY_MEASUREMENTS_COUNT; i++)
-    {
-        value = (1.0 * esp_random() / UINT32_MAX);
-        p_rsp->day_measmts.humidity[i] = (uint16_t)(value * 9500);
-    }
+    Climate_Task_GetDayMeasurements(&p_rsp->day_measmts);
 
     *p_rsp_len  = OFFSET_OF(ctrl_rsp_p, day_measmts);
     *p_rsp_len += sizeof(ctrl_day_measmts_t);
@@ -763,10 +684,6 @@ void HTTP_Server_Init(bool config)
 
     gConfig = config;
     HTTPS_LOGI("HTTP Config = %d", gConfig);
-
-    /* TODO: Remove */
-    FAN_Init();
-    Humidifier_Init();
 
     /* Initialize task */
     (void)xTaskCreatePinnedToCore(vHTTP_Server_Task, "HTTP Server", 6144, NULL, 2, NULL, CORE0);

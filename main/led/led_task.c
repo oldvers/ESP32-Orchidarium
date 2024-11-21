@@ -45,7 +45,7 @@ typedef struct
     double h;
     double s;
     double v;
-} hsv_t;
+} hsv_t, * hsv_p;
 
 typedef struct
 {
@@ -104,7 +104,7 @@ static leds_uwf_t    gLedsUwf      = {0};
 
 //-------------------------------------------------------------------------------------------------
 
-static void rgb_RGBtoHSV(led_color_t * p_color, hsv_t * p_hsv)
+static void rgb_RGBtoHSV(led_color_p p_color, hsv_p p_hsv)
 {
     double min, max, delta;
 
@@ -158,7 +158,7 @@ static void rgb_RGBtoHSV(led_color_t * p_color, hsv_t * p_hsv)
 
 //-------------------------------------------------------------------------------------------------
 
-static void rgb_HSVtoRGB(hsv_t * p_hsv, led_color_t * p_color)
+static void rgb_HSVtoRGB(hsv_t * p_hsv, led_color_p p_color)
 {
     double r = 0, g = 0, b = 0;
 
@@ -196,10 +196,10 @@ static double led_LinearInterpolation(double a, double b, double t)
 /* Calculates smooth color transition between two RGB colors */
 static void rgb_SmoothColorTransition
 (
-    led_color_t * p_a,
-    led_color_t * p_b,
+    led_color_p p_a,
+    led_color_p p_b,
     double prgs,
-    led_color_t * p_r
+    led_color_p p_r
 )
 {
     /* Clamp progress value between 0 and 1 */
@@ -217,10 +217,10 @@ static void rgb_SmoothColorTransition
 /* Calculates rainbow color transition between two RGB colors */
 static void rgb_RainbowColorTransition
 (
-    led_color_t * p_a,
-    led_color_t * p_b,
+    led_color_p p_a,
+    led_color_p p_b,
     double prgs,
-    led_color_t * p_r
+    led_color_p p_r
 )
 {
     hsv_t       src_hsv = {0};
@@ -282,7 +282,7 @@ static void rgb_IterateIndication_Color(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void rgb_SetIndication_Color(led_message_t * p_msg)
+static void rgb_SetIndication_Color(led_message_p p_msg)
 {
     enum
     {
@@ -353,7 +353,7 @@ static void rgb_IterateIndication_RgbCirculation(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void rgb_SetIndication_RgbCirculation(led_message_t * p_msg)
+static void rgb_SetIndication_RgbCirculation(led_message_p p_msg)
 {
     LED_Strip_RGB_Clear();
 
@@ -416,7 +416,7 @@ static void rgb_IterateIndication_Fade(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void rgb_SetIndication_Fade(led_message_t * p_msg)
+static void rgb_SetIndication_Fade(led_message_p p_msg)
 {
     LED_Strip_RGB_Clear();
 
@@ -455,7 +455,7 @@ static void rgb_IterateIndication_PingPong(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void rgb_SetIndication_PingPong(led_message_t * p_msg)
+static void rgb_SetIndication_PingPong(led_message_p p_msg)
 {
     LED_Strip_RGB_Clear();
 
@@ -485,7 +485,7 @@ static void rgb_IterateIndication_RainbowCirculation(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void rgb_SetIndication_RainbowCirculation(led_message_t * p_msg)
+static void rgb_SetIndication_RainbowCirculation(led_message_p p_msg)
 {
     double max = 0.0;
 
@@ -566,7 +566,7 @@ static void rgb_IterateIndication_Rainbow(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void rgb_SetIndication_Rainbow(led_message_t * p_msg)
+static void rgb_SetIndication_Rainbow(led_message_p p_msg)
 {
     enum
     {
@@ -639,7 +639,7 @@ static void rgb_IterateIndication_Sine(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void rgb_SetIndication_Sine(led_message_t * p_msg)
+static void rgb_SetIndication_Sine(led_message_p p_msg)
 {
     enum
     {
@@ -688,7 +688,7 @@ static void rgb_SetIndication_Sine(led_message_t * p_msg)
 
 //-------------------------------------------------------------------------------------------------
 
-static void rgb_ProcessMsg(led_message_t * p_msg)
+static void rgb_ProcessMsg(led_message_p p_msg)
 {
     gLedsRgb.command = p_msg->command;
     switch (gLedsRgb.command)
@@ -816,7 +816,7 @@ static void uwf_IterateIndication_Brightness(leds_p p_leds)
 
 //-------------------------------------------------------------------------------------------------
 
-static void uwf_SetIndication_Brightness(leds_p p_leds, led_message_t * p_msg)
+static void uwf_SetIndication_Brightness(leds_p p_leds, led_message_p p_msg)
 {
     enum
     {
@@ -901,7 +901,7 @@ static void uwf_IterateIndication_Sine(leds_p p_leds)
 
 //-------------------------------------------------------------------------------------------------
 
-static void uwf_SetIndication_Sine(leds_p p_leds, led_message_t * p_msg)
+static void uwf_SetIndication_Sine(leds_p p_leds, led_message_p p_msg)
 {
     enum
     {
@@ -966,7 +966,7 @@ static void fito_IterateIndication_Sine(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void uwf_ProcessMsg(led_message_t * p_msg)
+static void uwf_ProcessMsg(led_message_p p_msg)
 {
     switch (p_msg->command)
     {
@@ -1077,7 +1077,7 @@ void LED_Task_Init(void)
 
 //-------------------------------------------------------------------------------------------------
 
-void LED_Task_SendMsg(led_message_t * p_msg)
+void LED_Task_SendMsg(led_message_p p_msg)
 {
     LED_LOGI
     (
@@ -1101,7 +1101,7 @@ void LED_Task_SendMsg(led_message_t * p_msg)
 
 //-------------------------------------------------------------------------------------------------
 
-void LED_Task_DetermineColor(led_message_t * p_msg, led_color_t * p_color)
+void LED_Task_DetermineColor(led_message_p p_msg, led_color_p p_color)
 {
     double percent = (1.0 * p_msg->duration / p_msg->interval);
 
@@ -1138,7 +1138,7 @@ void LED_Task_DetermineColor(led_message_t * p_msg, led_color_t * p_color)
 
 //-------------------------------------------------------------------------------------------------
 
-void LED_Task_GetCurrentColor(led_color_t * p_color)
+void LED_Task_GetCurrentColor(led_color_p p_color)
 {
     /* This call is not thread safe but this is acceptable */
     LED_Strip_RGB_GetAverageColor(p_color);

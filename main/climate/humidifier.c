@@ -10,7 +10,7 @@
 
 //-------------------------------------------------------------------------------------------------
 
-#define HUMDFR_LOG  1
+#define HUMDFR_LOG  0
 
 #if (1 == HUMDFR_LOG)
 static const char * gTAG = "HUMIDIFIER";
@@ -276,9 +276,10 @@ typedef struct
 
 //-------------------------------------------------------------------------------------------------
 
-i2c_device_p         gBme280             = NULL;
-bme280_calibration_t gBme280Calibrartion = {0};
-bme280_measurement_t gBme280Measurement  = {0};
+static i2c_device_p         gBme280             = NULL;
+static bme280_calibration_t gBme280Calibrartion = {0};
+static bme280_measurement_t gBme280Measurement  = {0};
+static bool                 gOn                 = false;
 
 //-------------------------------------------------------------------------------------------------
 
@@ -720,6 +721,7 @@ void Humidifier_PowerOff(void)
     /* Power off the humidifier */
     gpio_set_level(CONFIG_HUMIDIFIER_POWER_GPIO, 0);
     vTaskDelay(pdMS_TO_TICKS(POWER_OFF_DELAY));
+    gOn = false;
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -735,6 +737,14 @@ void Humidifier_OnOffButtonClick(void)
     vTaskDelay(pdMS_TO_TICKS(CLICK_DELAY));
     gpio_set_level(CONFIG_HUMIDIFIER_BUTTON_GPIO, 0);
     vTaskDelay(pdMS_TO_TICKS(CLICK_DELAY));
+    gOn = true;
+}
+
+//-------------------------------------------------------------------------------------------------
+
+bool Humidifier_IsPoweredOn(void)
+{
+    return gOn;
 }
 
 //-------------------------------------------------------------------------------------------------

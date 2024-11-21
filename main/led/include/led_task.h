@@ -33,9 +33,9 @@ typedef struct
 } led_message_t, * led_message_p;
 
 void    LED_Task_Init(void);
-void    LED_Task_SendMsg(led_message_t * p_msg);
-void    LED_Task_DetermineColor(led_message_t * p_msg, led_color_t * p_color);
-void    LED_Task_GetCurrentColor(led_color_t * p_color);
+void    LED_Task_SendMsg(led_message_p p_msg);
+void    LED_Task_DetermineColor(led_message_p p_msg, led_color_p p_color);
+void    LED_Task_GetCurrentColor(led_color_p p_color);
 uint8_t LED_Task_GetCurrentUltraViolet(void);
 uint8_t LED_Task_GetCurrentWhite(void);
 uint8_t LED_Task_GetCurrentFito(void);

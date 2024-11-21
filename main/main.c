@@ -4,12 +4,9 @@
 #include "esp_log.h"
 
 #include "led_task.h"
-#include "led_strip_uwf.h"
-#include "fan.h"
-#include "humidifier.h"
-#include "i2c.h"
 #include "wifi_task.h"
 #include "time_task.h"
+#include "climate_task.h"
 
 //-------------------------------------------------------------------------------------------------
 
@@ -36,12 +33,14 @@ void app_main(void)
     LED_Task_Init();
     WiFi_Task_Init();
     Time_Task_Init();
+    Climate_Task_Init();
 
 //---    LED_Task_Test();
 //---    LED_Strip_UWF_Test();
 //---    FAN_Test();
 //---    Humidifier_Test();
 //---    I2C_Test();
+//---    Climate_Task_Test();
 
     while (1)
     {

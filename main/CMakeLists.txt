@@ -17,6 +17,7 @@ set( srcs
      "led/led_task.c"
      "climate/fan.c"
      "climate/humidifier.c"
+     "climate/climate_task.c"
      "utils/i2c.c"
      "udp/udp_dns_server.c"
      "wifi/wifi_task.c"
