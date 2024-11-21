@@ -18,9 +18,7 @@
 
 #define TIME_TASK_TICK_MS   (pdMS_TO_TICKS(1000))
 
-#define TIME_POINT_COUNT    (7)
 #define RGBA(rv,gv,bv,av)   {.r=rv,.g=gv,.b=bv,.a=av}
-#define TIME_SECONDS_IN_DAY (24*60*60)
 
 #define TIME_LOG  1
 
@@ -37,15 +35,68 @@ static const char * gTAG = "TIME";
 
 //-------------------------------------------------------------------------------------------------
 
+enum
+{
+    /* Calculated for Dec 21 2024 14:00:00 (seconds) */
+    TIME_SHORTEST_DAY_DURATION = 22222,
+    /* Calculated for Jun 21 2024 14:00:00 (seconds) */
+    TIME_LONGEST_DAY_DURATION  = 52666,
+    TIME_STR_MAX_LEN           = 28,
+    /* Whole 24 hours day duration (seconds) */
+    TIME_FULL_DAY_DURATION     = (24 * 60 * 60),
+    TIME_UV_MIN                = 25,
+    TIME_UV_MAX                = 150,
+    TIME_W_MIN                 = 170,
+    TIME_W_MAX                 = 230,
+};
+
+enum
+{
+    TIME_IDX_MIDNIGHT = 0,
+    TIME_IDX_MORNING_BLUE_HOUR,  
+    TIME_IDX_MORNING_GOLDEN_HOUR,
+    TIME_IDX_RISE,
+    TIME_IDX_DAY,
+    TIME_IDX_NOON,
+    TIME_IDX_EVENING_GOLDEN_HOUR,
+    TIME_IDX_SET,
+    TIME_IDX_EVENING_BLUE_HOUR,
+    TIME_IDX_NIGHT,
+    TIME_IDX_MAX,
+};
+
 typedef struct
 {
-    time_t        start;
-    uint32_t      duration;
+    time_t   start;
+    uint32_t interval;
+} time_point_t;
+
+typedef struct
+{
     led_color_t   src;
     led_color_t   dst;
     led_command_t cmd;
-    uint8_t       done;
-} time_point_t;
+} rgb_tx_t;
+
+typedef struct
+{
+    rgb_tx_t * transition;
+    uint32_t   interval;
+} rgb_point_t;
+
+typedef struct
+{
+    led_command_t u_cmd;
+    uint8_t       u_max;
+    led_command_t w_cmd;
+    uint8_t       w_max;
+} uw_tx_t;
+
+typedef struct
+{
+    uw_tx_t * transition;
+    uint32_t  interval;
+} uw_point_t;
 
 //-------------------------------------------------------------------------------------------------
 
@@ -63,25 +114,160 @@ static QueueHandle_t  gTimeQueue = {0};
 static time_command_t gCommand   = TIME_CMD_EMPTY;
 static time_t         gAlarm     = LONG_MAX;
 
-/* Start             -    0 minutes - RGB(  0,   0,  32) - RGB(  0,   0,  44) - Smooth      */
-/* MorningBlueHour   -  429 minutes - RGB(  0,   0,  44) - RGB( 64,   0,  56) - Rainbow CW  */
-/* MorningGoldenHour -  442 minutes - RGB( 64,   0,  56) - RGB(220, 220,   0) - Rainbow CW  */
-/* Rise              -  461 minutes                                                         */
-/* Day               -  505 minutes - RGB(220, 220,   0) - RGB(255, 255, 255) - Sine        */
-/* Noon              -  791 minutes                                                         */
-/* EveningGoldenHour - 1076 minutes - RGB(220, 220,   0) - RGB( 64,   0,  56) - Rainbow CCW */
-/* Set               - 1120 minutes                                                         */
-/* EveningBlueHour   - 1140 minutes - RGB( 64,   0,  56) - RGB(  0,   0,  44) - Rainbow CCW */
-/* Night             - 1153 minutes - RGB(  0,   0,  44) - RGB(  0,   0,  32) - None        */
-static time_point_t gPoints[TIME_POINT_COUNT] =
+/* Start             -    0 minutes */
+/* MorningBlueHour   -  429 minutes */
+/* MorningGoldenHour -  442 minutes */
+/* Rise              -  461 minutes */
+/* Day               -  505 minutes */
+/* Noon              -  791 minutes */
+/* EveningGoldenHour - 1076 minutes */
+/* Set               - 1120 minutes */
+/* EveningBlueHour   - 1140 minutes */
+/* Night             - 1153 minutes */
+
+static time_point_t gTimePoints[] =
 {
-    {0, 0, RGBA(  0,   0,  32, 1), RGBA(  0,   0,  44, 1), LED_CMD_RGB_INDICATE_COLOR,   0},
-    {0, 0, RGBA(  0,   0,  44, 0), RGBA( 64,   0,  56, 1), LED_CMD_RGB_INDICATE_RAINBOW, 0},
-    {0, 0, RGBA( 64,   0,  56, 0), RGBA(220, 220,   0, 1), LED_CMD_RGB_INDICATE_RAINBOW, 0},
-    {0, 0, RGBA(220, 220,   0, 1), RGBA(255, 255, 255, 1), LED_CMD_RGB_INDICATE_SINE,    0},
-    {0, 0, RGBA(220, 220,   0, 1), RGBA( 64,   0,  56, 0), LED_CMD_RGB_INDICATE_RAINBOW, 0},
-    {0, 0, RGBA( 64,   0,  56, 1), RGBA(  0,   0,  44, 0), LED_CMD_RGB_INDICATE_RAINBOW, 0},
-    {0, 0, RGBA(  0,   0,  44, 1), RGBA(  0,   0,  32, 1), LED_CMD_RGB_INDICATE_COLOR,   0},
+    [TIME_IDX_MIDNIGHT]            = {0, 0},
+    [TIME_IDX_MORNING_BLUE_HOUR]   = {0, 0},
+    [TIME_IDX_MORNING_GOLDEN_HOUR] = {0, 0},
+    [TIME_IDX_RISE]                = {0, 0},
+    [TIME_IDX_DAY]                 = {0, 0},
+    [TIME_IDX_NOON]                = {0, 0},
+    [TIME_IDX_EVENING_GOLDEN_HOUR] = {0, 0},
+    [TIME_IDX_SET]                 = {0, 0},
+    [TIME_IDX_EVENING_BLUE_HOUR]   = {0, 0},
+    [TIME_IDX_NIGHT]               = {0, 0},
+};
+
+/* Start             - RGB(0,0,32)    - RGB(0,0,44)    - Smooth      -  429 */
+/* MorningBlueHour   - RGB(0,0,44)    - RGB(64,0,56)   - Rainbow CW  -   13 */
+/* MorningGoldenHour - RGB(64,0,56)   - RGB(220,220,0) - Rainbow CW  -   19 */
+/* Rise              -                -                -             -  +44 */
+/* Day               - RGB(220,220,0) - RGB(10,10,10)  - Sine        -  286 */
+/* Noon              -                -                -             - +286 */
+/* EveningGoldenHour - RGB(220,220,0) - RGB( 64,0,56)  - Rainbow CCW -   44 */
+/* Set               -                -                -             -  +20 */
+/* EveningBlueHour   - RGB(64,0,56)   - RGB(0,0,44)    - Rainbow CCW -   13 */
+/* Night             - RGB(0,0,44)    - RGB(0,0,32)    - None        -  287 */
+
+static rgb_tx_t gRgbStart =
+{
+    RGBA(0, 0, 32, 1),
+    RGBA(0, 0, 44, 1),
+    LED_CMD_RGB_INDICATE_COLOR
+};
+static rgb_tx_t gRgbMorningBlueHour =
+{
+    RGBA( 0, 0, 44, 0),
+    RGBA(64, 0, 56, 1),
+    LED_CMD_RGB_INDICATE_RAINBOW
+};
+static rgb_tx_t gRgbMorningGoldenHour =
+{
+    RGBA( 64,   0, 56, 0),
+    RGBA(220, 220,  0, 1),
+    LED_CMD_RGB_INDICATE_RAINBOW
+};
+static rgb_tx_t gRgbDay =
+{
+    RGBA(220, 220, 0, 1),
+    RGBA( 10,  10, 10,1),
+    LED_CMD_RGB_INDICATE_SINE
+};
+static rgb_tx_t gRgbEveningGoldenHour =
+{
+    RGBA(220, 220,  0, 1),
+    RGBA( 64,   0, 56, 0),
+    LED_CMD_RGB_INDICATE_RAINBOW
+};
+static rgb_tx_t gRgbEveningBlueHour =
+{
+    RGBA(64, 0, 56, 1),
+    RGBA( 0, 0, 44, 0),
+    LED_CMD_RGB_INDICATE_RAINBOW
+};
+static rgb_tx_t gRgbNight =
+{
+    RGBA(0, 0, 44, 1),
+    RGBA(0, 0, 32, 1),
+    LED_CMD_RGB_INDICATE_COLOR
+};
+
+static rgb_point_t gRgbPoints[] =
+{
+    [TIME_IDX_MIDNIGHT]            = {&gRgbStart,             0},
+    [TIME_IDX_MORNING_BLUE_HOUR]   = {&gRgbMorningBlueHour,   0},
+    [TIME_IDX_MORNING_GOLDEN_HOUR] = {&gRgbMorningGoldenHour, 0},
+    [TIME_IDX_RISE]                = {NULL,                   0},
+    [TIME_IDX_DAY]                 = {&gRgbDay,               0},
+    [TIME_IDX_NOON]                = {NULL,                   0},
+    [TIME_IDX_EVENING_GOLDEN_HOUR] = {&gRgbEveningGoldenHour, 0},
+    [TIME_IDX_SET]                 = {NULL,                   0},
+    [TIME_IDX_EVENING_BLUE_HOUR]   = {&gRgbEveningBlueHour,   0},
+    [TIME_IDX_NIGHT]               = {&gRgbNight,             0},
+};
+
+/*                        ---------                         <---- Longest Day (UV/W max)    */
+/*                    ----         ----                                                     */
+/*                 ---                 ---                                                  */
+/*              ---                       ---                                               */
+/*            --                             --                                             */
+/*          --                                 --                                           */
+/*       ---              ---------              ---        <---- Shortest Day (UV/W min)   */
+/*    ---     ------------         ------------     ---                                     */
+/* -----------                                 -----------                                  */
+/* Rise ----------------------------------------------> Set                                 */
+/*                                                                                          */
+/* duration = (evening_golden_hour - day);                                                  */
+/* percent = (duration-SHORTEST_DAY_DURATION)/(LONGEST_DAY_DURATION-SHORTEST_DAY_DURATION); */
+/* UV = (UV_MIN + (UV_MAX - UV_MIN) * percent);                                             */
+/* W = (W_MIN + (W_MAX - W_MIN) * percent);                                                 */
+/*                                                                                          */
+/* Start             - UW(0,0)     - Smooth -  429 */
+/* MorningBlueHour   -             -        -  +13 */
+/* MorningGoldenHour -             -        -  +19 */
+/* Rise              -             -        -  +44 */
+/* Day               - UW(110,180) - Sine   -  286 */
+/* Noon              -             -        - +286 */
+/* EveningGoldenHour - UW(0,0)     - Smooth -   44 */
+/* Set               -             -        -  +20 */
+/* EveningBlueHour   -             -        -  +13 */
+/* Night             -             -        - +287 */
+
+static uw_tx_t gUwStart =
+{
+    LED_CMD_UV_INDICATE_BRIGHTNESS,
+    0,
+    LED_CMD_W_INDICATE_BRIGHTNESS,
+    0
+};
+static uw_tx_t gUwDay =
+{
+    LED_CMD_UV_INDICATE_SINE,
+    0,
+    LED_CMD_W_INDICATE_SINE,
+    0
+};
+static uw_tx_t gUwEveningGoldenHour =
+{
+    LED_CMD_UV_INDICATE_BRIGHTNESS,
+    0,
+    LED_CMD_W_INDICATE_BRIGHTNESS,
+    0
+};
+
+static uw_point_t gUwPoints[] =
+{
+    [TIME_IDX_MIDNIGHT]            = {&gUwStart,             0},
+    [TIME_IDX_MORNING_BLUE_HOUR]   = {NULL,                  0},
+    [TIME_IDX_MORNING_GOLDEN_HOUR] = {NULL,                  0},
+    [TIME_IDX_RISE]                = {NULL,                  0},
+    [TIME_IDX_DAY]                 = {&gUwDay,               0},
+    [TIME_IDX_NOON]                = {NULL,                  0},
+    [TIME_IDX_EVENING_GOLDEN_HOUR] = {&gUwEveningGoldenHour, 0},
+    [TIME_IDX_SET]                 = {NULL,                  0},
+    [TIME_IDX_EVENING_BLUE_HOUR]   = {NULL,                  0},
+    [TIME_IDX_NIGHT]               = {NULL,                  0},
 };
 
 //-------------------------------------------------------------------------------------------------
@@ -207,14 +393,156 @@ static time_t time_SunNight(time_t time)
 
 //-------------------------------------------------------------------------------------------------
 
+static void time_TimePointsCalculate(time_t start_t, time_t ref_t, struct tm * p_dt, char * p_str)
+{
+    int point = 0;
+
+    TIME_LOGI("Calculation of Time points : -----------");
+    for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
+    {
+        if (TIME_IDX_NIGHT == point)
+        {
+            gTimePoints[point].start     = time_SunNight(ref_t);
+            gTimePoints[point].interval  = (start_t + TIME_FULL_DAY_DURATION);
+            gTimePoints[point].interval -= gTimePoints[point].start;
+        }
+        else
+        {
+            switch (point)
+            {
+                case TIME_IDX_EVENING_BLUE_HOUR:
+                    gTimePoints[point].start = time_SunEveningBlueHour(ref_t);
+                    break;
+                case TIME_IDX_SET:
+                    gTimePoints[point].start = time_SunSet(ref_t);
+                    break;
+                case TIME_IDX_EVENING_GOLDEN_HOUR:
+                    gTimePoints[point].start = time_SunEveningGoldenHour(ref_t);
+                    break;
+                case TIME_IDX_NOON:
+                    gTimePoints[point].start = time_SunNoon(ref_t);
+                    break;
+                case TIME_IDX_DAY:
+                    gTimePoints[point].start = time_SunDay(ref_t);
+                    break;
+                case TIME_IDX_RISE:
+                    gTimePoints[point].start = time_SunRise(ref_t);
+                    break;
+                case TIME_IDX_MORNING_GOLDEN_HOUR:
+                    gTimePoints[point].start = time_SunMorningGoldenHour(ref_t);
+                    break;
+                case TIME_IDX_MORNING_BLUE_HOUR:
+                    gTimePoints[point].start = time_SunMorningBlueHour(ref_t);
+                    break;
+                case TIME_IDX_MIDNIGHT:
+                    gTimePoints[point].start = start_t;
+                    break;
+            }
+            gTimePoints[point].interval  = gTimePoints[point + 1].start;
+            gTimePoints[point].interval -= gTimePoints[point].start;
+        }
+
+        localtime_r(&gTimePoints[point].start, p_dt);
+        strftime(p_str, TIME_STR_MAX_LEN, "%c", p_dt);
+        TIME_LOGI
+        (
+            "[%d] - Interval: %5lu s    : %12llu - %s",
+            point,
+            gTimePoints[point].interval,
+            gTimePoints[point].start,
+            p_str
+        );
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void time_RgbPointsCalculate(void)
+{
+    uint32_t interval = 0;
+    int      point    = 0;
+
+    TIME_LOGI("Calculation of RGB points  : -----------");
+    interval = 0;
+    for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
+    {
+        interval += gTimePoints[point].interval;
+        if (NULL != gRgbPoints[point].transition)
+        {
+            gRgbPoints[point].interval = interval;
+            interval = 0;
+            TIME_LOGI("[%d] - Interval: %5lu s", point, gRgbPoints[point].interval);
+        }
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void time_UwPointsCalculate(void)
+{
+    uint32_t interval = 0;
+    int      point    = 0;
+    int32_t  value    = 0;
+
+    TIME_LOGI("Calculation of UV/W points : -----------");
+    interval = 0;
+    for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
+    {
+        interval += gTimePoints[point].interval;
+        if (NULL != gUwPoints[point].transition)
+        {
+            gUwPoints[point].interval = interval;
+            interval = 0;
+        
+            if (LED_CMD_UV_INDICATE_SINE == gUwPoints[point].transition->u_cmd)
+            {
+                value  = gTimePoints[TIME_IDX_EVENING_GOLDEN_HOUR].start;
+                value -= gTimePoints[TIME_IDX_DAY].start;
+                value -= TIME_SHORTEST_DAY_DURATION;
+                value *= (TIME_UV_MAX - TIME_UV_MIN);
+                value /= (TIME_LONGEST_DAY_DURATION - TIME_SHORTEST_DAY_DURATION);
+                value += TIME_UV_MIN;
+                gUwPoints[point].transition->u_max = value;
+            }
+
+            if (LED_CMD_W_INDICATE_SINE == gUwPoints[point].transition->w_cmd)
+            {
+                value  = gTimePoints[TIME_IDX_EVENING_GOLDEN_HOUR].start;
+                value -= gTimePoints[TIME_IDX_DAY].start;
+                value -= TIME_SHORTEST_DAY_DURATION;
+                value *= (TIME_W_MAX - TIME_W_MIN);
+                value /= (TIME_LONGEST_DAY_DURATION - TIME_SHORTEST_DAY_DURATION);
+                value += TIME_W_MIN;
+                gUwPoints[point].transition->w_max = value;
+            }
+
+            if ((0 == gUwPoints[point].transition->u_max) &&
+                (0 == gUwPoints[point].transition->w_max))
+            {
+                gUwPoints[point].interval = 0;
+            }
+
+            TIME_LOGI
+            (
+                "[%d] - Interval: %5lu s - UV: %3d - W: %3d",
+                point,
+                gUwPoints[point].interval,
+                gUwPoints[point].transition->u_max,
+                gUwPoints[point].transition->w_max
+            );
+        }
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+
 static void time_PointsCalculate(time_t t, struct tm * p_dt, char * p_str)
 {
-    char    string[28]   = {0};
-    time_t  zero_time    = 0;
-    time_t  tz_offset    = 0;
-    time_t  current_time = t;
-    time_t  ref_utc_time = t;
-    int     point        = 0;
+    char     string[TIME_STR_MAX_LEN] = {0};
+    time_t   zero_time                = 0;
+    time_t   tz_offset                = 0;
+    time_t   current_time             = t;
+    time_t   ref_utc_time             = t;
 
     TIME_LOGI("Current local time         : %12llu - %s", current_time, p_str);
 
@@ -243,102 +571,157 @@ static void time_PointsCalculate(time_t t, struct tm * p_dt, char * p_str)
     strftime(string, sizeof(string), "%c", p_dt);
     TIME_LOGI("Start of day time          : %12llu - %s", start_day_time, string);
 
-    for (point = (TIME_POINT_COUNT - 1); point >= 0; point--)
-    {
-        if (6 == point)
-        {
-            gPoints[point].start     = time_SunNight(ref_utc_time);
-            gPoints[point].duration  = (start_day_time + TIME_SECONDS_IN_DAY);
-            gPoints[point].duration -= gPoints[point].start;
-        }
-        else
-        {
-            switch (point)
-            {
-                case 5:
-                    gPoints[point].start = time_SunEveningBlueHour(ref_utc_time);
-                    break;
-                case 4:
-                    gPoints[point].start = time_SunEveningGoldenHour(ref_utc_time);
-                    break;
-                case 3:
-                    gPoints[point].start = time_SunDay(ref_utc_time);
-                    break;
-                case 2:
-                    gPoints[point].start = time_SunMorningGoldenHour(ref_utc_time);
-                    break;
-                case 1:
-                    gPoints[point].start = time_SunMorningBlueHour(ref_utc_time);
-                    break;
-                case 0:
-                    gPoints[point].start = start_day_time;
-                    break;
-            }
-            gPoints[point].duration = (gPoints[point + 1].start - gPoints[point].start);
-        }
+    time_TimePointsCalculate(start_day_time, ref_utc_time, p_dt, string);
 
-        localtime_r(&gPoints[point].start, p_dt);
-        strftime(string, sizeof(string), "%c", p_dt);
-        TIME_LOGI
-        (
-            "[%d] - Duration: %5lu s    : %12llu - %s",
-            point,
-            gPoints[point].duration,
-            gPoints[point].start,
-            string
-        );
+    time_RgbPointsCalculate();
+
+    time_UwPointsCalculate();
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void time_SunRgb(time_t curr_t, FW_BOOLEAN pre_tx, led_message_p p_rgb_msg)
+{
+    enum
+    {
+        TRANSITION_INTERVAL = 1200,
+    };
+    led_message_t pre_msg  = {0};
+    led_color_t   color    = {0};
+    int           point    = 0;
+    uint32_t      interval = UINT32_MAX;
+    uint32_t      duration = UINT32_MAX;
+
+    for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
+    {
+        /* Find the offset inside the time range */
+        if ((curr_t >= gTimePoints[point].start) && (NULL != gRgbPoints[point].transition))
+        {
+            interval = (gTimePoints[point].interval * 1000);
+            duration = ((curr_t - gTimePoints[point].start) * 1000);
+            TIME_LOGI("[%d] - Interval/Duration    : %12lu - %lu", point, interval, duration);
+
+            /* Prepare the indication message */
+            p_rgb_msg->command         = gRgbPoints[point].transition->cmd;
+            p_rgb_msg->src_color.dword = gRgbPoints[point].transition->src.dword;
+            p_rgb_msg->dst_color.dword = gRgbPoints[point].transition->dst.dword;
+            p_rgb_msg->interval        = interval;
+            p_rgb_msg->duration        = duration;
+
+            if (FW_TRUE == pre_tx)
+            {
+                LED_Task_DetermineColor(p_rgb_msg, &color);
+                pre_msg.command         = LED_CMD_RGB_INDICATE_COLOR;
+                pre_msg.dst_color.dword = color.dword;
+                pre_msg.interval        = TRANSITION_INTERVAL;
+                LED_Task_SendMsg(&pre_msg);
+            }
+
+            break;
+        }
     }
 }
 
 //-------------------------------------------------------------------------------------------------
 
-static void time_Indicate(time_t t, struct tm * p_dt, char * p_str, FW_BOOLEAN pre_transition)
+static void time_SunUw
+(
+    time_t curr_t,
+    FW_BOOLEAN pre_tx,
+    led_message_p p_u_msg,
+    led_message_p p_w_msg
+)
 {
     enum
     {
         TRANSITION_INTERVAL = 1200,
-        TRANSITION_TIMEOUT  = (pdMS_TO_TICKS(1300)),
     };
-    led_message_t led_msg      = {0};
-    time_t        current_time = t;
-    int           point        = 0;
-    uint32_t      interval     = UINT32_MAX;
-    uint32_t      duration     = UINT32_MAX;
+    led_message_t pre_msg  = {0};
+    led_color_t   color    = {0};
+    int           point    = 0;
+    uint32_t      interval = UINT32_MAX;
+    uint32_t      duration = UINT32_MAX;
 
-    TIME_LOGI("Current local time         : %12llu - %s", current_time, p_str);
-
-    for (point = (TIME_POINT_COUNT - 1); point >= 0; point--)
+    for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
     {
         /* Find the offset inside the time range */
-        if (current_time >= gPoints[point].start)
+        if ((curr_t >= gTimePoints[point].start) && (NULL != gUwPoints[point].transition))
         {
-            interval    = (gPoints[point].duration * 1000);
-            duration    = ((current_time - gPoints[point].start) * 1000);
+            interval = (gTimePoints[point].interval * 1000);
+            duration = ((curr_t - gTimePoints[point].start) * 1000);
             TIME_LOGI("[%d] - Interval/Duration    : %12lu - %lu", point, interval, duration);
 
             /* Prepare the indication message */
-            led_msg.command         = gPoints[point].cmd;
-            led_msg.src_color.dword = gPoints[point].src.dword;
-            led_msg.dst_color.dword = gPoints[point].dst.dword;
-            led_msg.interval        = interval;
-            led_msg.duration        = duration;
+            p_u_msg->command     = gUwPoints[point].transition->u_cmd;
+            p_u_msg->src_color.a = 0;
+            p_u_msg->dst_color.a = gUwPoints[point].transition->u_max;
+            p_u_msg->interval    = interval;
+            p_u_msg->duration    = duration;
 
-            if (FW_TRUE == pre_transition)
+            p_w_msg->command     = gUwPoints[point].transition->w_cmd;
+            p_w_msg->src_color.a = 0;
+            p_w_msg->dst_color.a = gUwPoints[point].transition->w_max;
+            p_w_msg->interval    = interval;
+            p_w_msg->duration    = duration;
+
+            if (FW_TRUE == pre_tx)
             {
-                led_color_t   color   = {0};
-                led_message_t pre_msg = {0};
-                LED_Task_DetermineColor(&led_msg, &color);
-                pre_msg.command         = LED_CMD_RGB_INDICATE_COLOR;
-                pre_msg.dst_color.dword = color.dword;
-                pre_msg.interval        = TRANSITION_INTERVAL;
+                LED_Task_DetermineColor(p_u_msg, &color);
+                pre_msg.command     = LED_CMD_UV_INDICATE_BRIGHTNESS;
+                pre_msg.dst_color.a = color.a;
+                pre_msg.interval    = TRANSITION_INTERVAL;
                 LED_Task_SendMsg(&pre_msg);
-                vTaskDelay(TRANSITION_TIMEOUT);
-            }
 
-            LED_Task_SendMsg(&led_msg);
+                LED_Task_DetermineColor(p_w_msg, &color);
+                pre_msg.command     = LED_CMD_W_INDICATE_BRIGHTNESS;
+                pre_msg.dst_color.a = color.a;
+                LED_Task_SendMsg(&pre_msg);
+            }
 
             break;
         }
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void time_Sun(time_t t, struct tm * p_dt, char * p_str, FW_BOOLEAN pre_transition)
+{
+    enum
+    {
+        TRANSITION_TIMEOUT  = (pdMS_TO_TICKS(1300)),
+    };
+    led_message_t rgb_msg      = {0};
+    led_message_t u_msg        = {0};
+    led_message_t w_msg        = {0};
+    time_t        current_time = t;
+
+    TIME_LOGI("Current local time         : %12llu - %s", current_time, p_str);
+
+    time_SunRgb(current_time, pre_transition, &rgb_msg);
+    time_SunUw(current_time, pre_transition, &u_msg, &w_msg);
+
+    if (FW_TRUE == pre_transition)
+    {
+        if ((0 != rgb_msg.command) || (0 != u_msg.command) || (0 != w_msg.command))
+        {
+            vTaskDelay(TRANSITION_TIMEOUT);
+        }
+    }
+
+    if (0 != rgb_msg.command)
+    {
+        LED_Task_SendMsg(&rgb_msg);
+    } 
+    
+    if (0 != u_msg.command)
+    {
+        LED_Task_SendMsg(&u_msg);
+    } 
+    
+    if (0 != w_msg.command)
+    {
+        LED_Task_SendMsg(&w_msg);
     }
 }
 
@@ -350,18 +733,18 @@ static void time_SetAlarm(time_t t, struct tm * p_dt, char * p_str)
     time_t  current_time = t;
     int32_t point        = 0;
 
-    for (point = 0; point < TIME_POINT_COUNT; point++)
+    for (point = 0; point < TIME_IDX_MAX; point++)
     {
-        if (current_time < gPoints[point].start)
+        if (current_time < gTimePoints[point].start)
         {
-            gAlarm = gPoints[point].start;
+            gAlarm = gTimePoints[point].start;
             localtime_r(&gAlarm, p_dt);
             strftime(string, sizeof(string), "%c", p_dt);
             TIME_LOGI("Alarm set to next time     : %12llu - %s", gAlarm, string);
             break;
         }
     }
-    if (TIME_POINT_COUNT == point)
+    if (TIME_IDX_MAX == point)
     {
         gAlarm = LONG_MAX;
         TIME_LOGI("Alarm cleared              : %12llu - %s", t, p_str);
@@ -378,7 +761,7 @@ static void time_ProcessMsg(time_message_t * p_msg, time_t t, struct tm * p_dt, 
     {
         time_PointsCalculate(t, p_dt, p_str);
         time_SetAlarm(t, p_dt, p_str);
-        time_Indicate(t, p_dt, p_str, FW_TRUE);
+        time_Sun(t, p_dt, p_str, FW_TRUE);
     }
 }
 
@@ -405,7 +788,7 @@ static void time_CheckForAlarms(time_t t, struct tm * p_dt, char * p_str)
                 );
                 time_PointsCalculate(t, p_dt, p_str);
                 time_SetAlarm(t, p_dt, p_str);
-                time_Indicate(t, p_dt, p_str, FW_TRUE);
+                time_Sun(t, p_dt, p_str, FW_TRUE);
             }
         }
         else
@@ -420,7 +803,7 @@ static void time_CheckForAlarms(time_t t, struct tm * p_dt, char * p_str)
                     p_str
                 );
                 time_SetAlarm(t, p_dt, p_str);
-                time_Indicate(t, p_dt, p_str, FW_TRUE);
+                time_Sun(t, p_dt, p_str, FW_TRUE);
             }
         }
     }
@@ -744,7 +1127,7 @@ static void time_Test_Alarm(void)
     vTaskDelay(15 * TIME_TASK_TICK_MS);
 
     /* Set the date/time before calculated alarm */
-    now        = (gPoints[3].start - 10);
+    now        = (gTimePoints[3].start - 10);
     tv.tv_sec  = now;
     tv.tv_usec = 0;
     settimeofday(&tv, NULL);

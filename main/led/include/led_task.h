@@ -6,7 +6,7 @@
 
 typedef enum
 {
-    LED_CMD_EMPTY,
+    LED_CMD_EMPTY = 0,
     LED_CMD_RGB_INDICATE_COLOR,
     LED_CMD_RGB_INDICATE_RGB_CIRCULATION,
     LED_CMD_RGB_INDICATE_FADE,
@@ -30,7 +30,7 @@ typedef struct
     led_color_t   dst_color;
     uint32_t      interval;
     uint32_t      duration;
-} led_message_t;
+} led_message_t, * led_message_p;
 
 void    LED_Task_Init(void);
 void    LED_Task_SendMsg(led_message_t * p_msg);
