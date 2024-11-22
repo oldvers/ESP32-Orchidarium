@@ -41,6 +41,7 @@ void app_main(void)
 //---    Humidifier_Test();
 //---    I2C_Test();
 //---    Climate_Task_Test();
+//---    Time_Task_Test();
 
     while (1)
     {

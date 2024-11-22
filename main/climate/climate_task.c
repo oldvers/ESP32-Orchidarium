@@ -70,7 +70,7 @@ typedef struct
     uint64_t pressure;
     uint32_t temperature;
     uint32_t humidity;
-    uint8_t  count;
+    uint32_t count;
 } accumulator_t, * accumulator_p;
 
 typedef struct

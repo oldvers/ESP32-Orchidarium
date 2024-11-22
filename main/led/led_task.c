@@ -812,6 +812,8 @@ static void uwf_IterateIndication_Brightness(leds_p p_leds)
         p_leds->command = LED_CMD_EMPTY;
     }
     p_leds->fp_set(value);
+
+    LED_LOGI("Br:V(%d)-P:%d", value, (int)(100 * percent));
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -833,10 +835,10 @@ static void uwf_SetIndication_Brightness(leds_p p_leds, led_message_p p_msg)
 
     /* Determine the SRC brightness */
     p_leds->src = p_msg->src_color.a;
-    if (0 == p_msg->src_color.a)
-    {
-        p_leds->src = p_leds->fp_get();
-    }
+    //if (0 == p_msg->src_color.a)
+    //{
+    //    p_leds->src = p_leds->fp_get();
+    //}
 
     /* Calculate the timer parameters */
     if ((MIN_TRANSITION_TIME_MS < p_msg->interval) && (p_msg->duration < p_msg->interval))
@@ -897,6 +899,8 @@ static void uwf_IterateIndication_Sine(leds_p p_leds)
         p_leds->command = LED_CMD_EMPTY;
     }
     p_leds->fp_set(value);
+
+    LED_LOGI("Sn:V(%d)-P:%d", value, (int)(100 * percent));
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -917,15 +921,16 @@ static void uwf_SetIndication_Sine(leds_p p_leds, led_message_p p_msg)
     p_leds->time.delta    = (p_leds->tick.interval * LED_TASK_TICK_MS);
 
     /* Determine the SRC brightness */
-    p_leds->src = 0;
-    if (0 == p_msg->src_color.a)
-    {
-        p_leds->src = p_leds->fp_get();
-    }
-    else
-    {
-        p_leds->src = p_msg->src_color.a;
-    }
+    p_leds->src = p_msg->src_color.a;
+    //p_leds->src = 0;
+    //if (0 == p_msg->src_color.a)
+    //{
+    //    p_leds->src = p_leds->fp_get();
+    //}
+    //else
+    //{
+    //    p_leds->src = p_msg->src_color.a;
+    //}
 
     /* Calculate the timer parameters */
     if ((MIN_TRANSITION_TIME_MS < p_msg->interval) && (p_msg->duration < p_msg->interval))
@@ -1615,207 +1620,6 @@ static void uwf_Test_Sine(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void rgbuw_Test_DayNight(void)
-{
-    #define RGBA(rv,gv,bv,av) {.r=rv,.g=gv,.b=bv,.a=av}
-
-    led_message_t led_msg = {0};
-    uint8_t       p       = 0;
-
-    enum
-    {
-        SHORTEST_DAY_DURATION = 29139,
-        LONGEST_DAY_DURATION  = 58832,
-    };
-
-    enum
-    {
-        IDX_MIDNIGHT = 0,
-        IDX_MORNING_BLUE_HOUR,  
-        IDX_MORNING_GOLDEN_HOUR,
-        IDX_RISE,
-        IDX_DAY,
-        IDX_NOON,
-        IDX_EVENING_GOLDEN_HOUR,
-        IDX_SET,
-        IDX_EVENING_BLUE_HOUR,
-        IDX_NIGHT,
-        IDX_MAX,
-    };
-
-    typedef struct
-    {
-        uint32_t      start;
-        uint32_t      end;
-    } time_point_t;
-
-    /* Start             -    0 minutes */
-    /* MorningBlueHour   -  429 minutes */
-    /* MorningGoldenHour -  442 minutes */
-    /* Rise              -  461 minutes */
-    /* Day               -  505 minutes */
-    /* Noon              -  791 minutes */
-    /* EveningGoldenHour - 1076 minutes */
-    /* Set               - 1120 minutes */
-    /* EveningBlueHour   - 1140 minutes */
-    /* Night             - 1153 minutes */
-
-    time_point_t time_points[] =
-    {
-        [IDX_MIDNIGHT]            = {   0,  429},
-        [IDX_MORNING_BLUE_HOUR]   = { 429,  442},
-        [IDX_MORNING_GOLDEN_HOUR] = { 442,  461},
-        [IDX_RISE]                = { 461,  505},
-        [IDX_DAY]                 = { 505,  791},
-        [IDX_NOON]                = { 791, 1076},
-        [IDX_EVENING_GOLDEN_HOUR] = {1076, 1120},
-        [IDX_SET]                 = {1120, 1140},
-        [IDX_EVENING_BLUE_HOUR]   = {1140, 1153},
-        [IDX_NIGHT]               = {1153, 1440},
-    };
-
-    typedef struct
-    {
-        led_color_t   from;
-        led_color_t   to;
-        led_command_t cmd;
-    } rgb_tx_t;
-
-    typedef struct
-    {
-        rgb_tx_t * transition;
-        uint32_t   interval;
-    } rgb_point_t;
-
-    /* Start             - RGB(0,0,32)    - RGB(0,0,44)      - Smooth      -  429 */
-    /* MorningBlueHour   - RGB(0,0,44)    - RGB(64,0,56)     - Rainbow CW  -   13 */
-    /* MorningGoldenHour - RGB(64,0,56)   - RGB(220,220,0)   - Rainbow CW  -   19 */
-    /* Rise              -                -                  -             -  +44 */
-    /* Day               - RGB(220,220,0) - RGB(255,255,255) - Sine        -  286 */
-    /* Noon              -                -                  -             - +286 */
-    /* EveningGoldenHour - RGB(220,220,0) - RGB( 64,0,56)    - Rainbow CCW -   44 */
-    /* Set               -                -                  -             -  +20 */
-    /* EveningBlueHour   - RGB(64,0,56)   - RGB(0,0,44)      - Rainbow CCW -   13 */
-    /* Night             - RGB(0,0,44)    - RGB(0,0,32)      - None        -  287 */
-
-    rgb_tx_t rgbStart             = {RGBA(0,0,32,1),    RGBA(0,0,44,1),    LED_CMD_RGB_INDICATE_COLOR};
-    rgb_tx_t rgbMorningBlueHour   = {RGBA(0,0,44,0),    RGBA(64,0,56,1),   LED_CMD_RGB_INDICATE_RAINBOW};
-    rgb_tx_t rgbMorningGoldenHour = {RGBA(64,0,56,0),   RGBA(220,220,0,1), LED_CMD_RGB_INDICATE_RAINBOW};
-    rgb_tx_t rgbDay               = {RGBA(220,220,0,1), RGBA(10,10,10,1),  LED_CMD_RGB_INDICATE_SINE};
-    rgb_tx_t rgbEveningGoldenHour = {RGBA(220,220,0,1), RGBA(64,0,56,0),   LED_CMD_RGB_INDICATE_RAINBOW};
-    rgb_tx_t rgbEveningBlueHour   = {RGBA(64,0,56,1),   RGBA(0,0,44,0),    LED_CMD_RGB_INDICATE_RAINBOW};
-    rgb_tx_t rgbNight             = {RGBA(0,0,44,1),    RGBA(0,0,32,1),    LED_CMD_RGB_INDICATE_COLOR};
-
-    rgb_point_t rgb_points[] =
-    {
-        [IDX_MIDNIGHT]            = {&rgbStart,             429},
-        [IDX_MORNING_BLUE_HOUR]   = {&rgbMorningBlueHour,    13},
-        [IDX_MORNING_GOLDEN_HOUR] = {&rgbMorningGoldenHour,  63},
-        [IDX_RISE]                = {NULL,                    0},
-        [IDX_DAY]                 = {&rgbDay,               572},
-        [IDX_NOON]                = {NULL,                    0},
-        [IDX_EVENING_GOLDEN_HOUR] = {&rgbEveningGoldenHour,  64},
-        [IDX_SET]                 = {NULL,                    0},
-        [IDX_EVENING_BLUE_HOUR]   = {&rgbEveningBlueHour,    13},
-        [IDX_NIGHT]               = {&rgbNight,             287},
-    };
-
-    typedef struct
-    {
-        uint8_t       u_max;
-        led_command_t u_cmd;
-        uint8_t       w_max;
-        led_command_t w_cmd;
-    } uw_tx_t;
-
-    typedef struct
-    {
-        uw_tx_t * transition;
-        uint32_t  interval;
-    } uw_point_t;
-
-    /*                        ---------                         <---- Longest Day (UV/W max)    */
-    /*                    ----         ----                                                     */
-    /*                 ---                 ---                                                  */
-    /*              ---                       ---                                               */
-    /*            --                             --                                             */
-    /*          --                                 --                                           */
-    /*       ---              ---------              ---        <---- Shortest Day (UV/W min)   */
-    /*    ---     ------------         ------------     ---                                     */
-    /* -----------                                 -----------                                  */
-    /* Rise ----------------------------------------------> Set                                 */
-    /*                                                                                          */
-    /* duration = (evening_golden_hour - day);                                                  */
-    /* percent = (duration-SHORTEST_DAY_DURATION)/(LONGEST_DAY_DURATION-SHORTEST_DAY_DURATION); */
-    /* UV = (UV_MIN + (UV_MAX - UV_MIN) * percent);                                             */
-    /* W = (W_MIN + (W_MAX - W_MIN) * percent);                                                 */
-    /*                                                                                          */
-    /* Start             - UW(0,0)     - Smooth -  429 */
-    /* MorningBlueHour   -             -        -  +13 */
-    /* MorningGoldenHour -             -        -  +19 */
-    /* Rise              -             -        -  +44 */
-    /* Day               - UW(110,180) - Sine   -  286 */
-    /* Noon              -             -        - +286 */
-    /* EveningGoldenHour - UW(0,0)     - Smooth -   44 */
-    /* Set               -             -        -  +20 */
-    /* EveningBlueHour   -             -        -  +13 */
-    /* Night             -             -        - +287 */
-
-    uw_tx_t uwStart             = {0, LED_CMD_UV_INDICATE_BRIGHTNESS, 0, LED_CMD_W_INDICATE_BRIGHTNESS};
-    uw_tx_t uwDay               = {110, LED_CMD_UV_INDICATE_SINE, 180, LED_CMD_W_INDICATE_SINE};
-    uw_tx_t uwEveningGoldenHour = {0, LED_CMD_UV_INDICATE_BRIGHTNESS, 0, LED_CMD_W_INDICATE_BRIGHTNESS};
-
-    uw_point_t uw_points[] =
-    {
-        [IDX_MIDNIGHT]            = {&uwStart,             0},
-        [IDX_MORNING_BLUE_HOUR]   = {NULL,                 0},
-        [IDX_MORNING_GOLDEN_HOUR] = {NULL,                 0},
-        [IDX_RISE]                = {NULL,                 0},
-        [IDX_DAY]                 = {&uwDay,             572},
-        [IDX_NOON]                = {NULL,                 0},
-        [IDX_EVENING_GOLDEN_HOUR] = {&uwEveningGoldenHour, 0},
-        [IDX_SET]                 = {NULL,                 0},
-        [IDX_EVENING_BLUE_HOUR]   = {NULL,                 0},
-        [IDX_NIGHT]               = {NULL,                 0},
-    };
-
-    for (p = 0; p < IDX_MAX; p++)
-    {
-        uint32_t timeout = (time_points[p].end - time_points[p].start) * 100;
-
-        if (NULL != rgb_points[p].transition)
-        {
-            memset(&led_msg, 0, sizeof(led_msg));
-            led_msg.command         = rgb_points[p].transition->cmd;
-            led_msg.src_color.dword = rgb_points[p].transition->from.dword;
-            led_msg.dst_color.dword = rgb_points[p].transition->to.dword;
-            led_msg.interval        = (rgb_points[p].interval * 100);
-            led_msg.duration        = 0;
-            LED_Task_SendMsg(&led_msg);
-        }
-
-        if (NULL != uw_points[p].transition)
-        {
-            memset(&led_msg, 0, sizeof(led_msg));
-            led_msg.src_color.a = 0;
-            led_msg.interval    = (uw_points[p].interval * 100);
-            led_msg.duration    = 0;
-
-            led_msg.command     = uw_points[p].transition->u_cmd;
-            led_msg.dst_color.a = uw_points[p].transition->u_max;
-            LED_Task_SendMsg(&led_msg);
-
-            led_msg.command     = uw_points[p].transition->w_cmd;
-            led_msg.dst_color.a = uw_points[p].transition->w_max;
-            LED_Task_SendMsg(&led_msg);
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(timeout));
-    }
-}
-
-//-------------------------------------------------------------------------------------------------
-
 void LED_Task_Test(void)
 {
     rgb_Test_Color();
@@ -1827,7 +1631,6 @@ void LED_Task_Test(void)
     rgb_Test_Sine();
     uwf_Test_Brightness();
     uwf_Test_Sine();
-    rgbuw_Test_DayNight();
 }
 
 //-------------------------------------------------------------------------------------------------

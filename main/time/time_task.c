@@ -13,6 +13,7 @@
 
 #include "time_task.h"
 #include "led_task.h"
+#include "climate_task.h"
 
 //-------------------------------------------------------------------------------------------------
 
@@ -97,6 +98,24 @@ typedef struct
     uw_tx_t * transition;
     uint32_t  interval;
 } uw_point_t;
+
+typedef struct
+{
+    climate_command_t cmd;
+    fan_speed_t       speed;
+    bool              repeat;
+    uint32_t          interval;
+    uint32_t          duration;
+} fan_tx_t, * fan_tx_p;
+
+typedef struct
+{
+    climate_command_t cmd;
+    bool              on;
+    bool              repeat;
+    uint32_t          interval;
+    uint32_t          duration;
+} humidifier_tx_t, * humidifier_tx_p;
 
 //-------------------------------------------------------------------------------------------------
 
@@ -1138,10 +1157,215 @@ static void time_Test_Alarm(void)
 
 //-------------------------------------------------------------------------------------------------
 
+static void time_Test_DayNight(void)
+{
+    led_message_t     led_msg = {0};
+    climate_message_t clt_msg = {0};
+    uint8_t           p       = 0;
+
+    /* Start             -    0 minutes */
+    /* MorningBlueHour   -  429 minutes */
+    /* MorningGoldenHour -  442 minutes */
+    /* Rise              -  461 minutes */
+    /* Day               -  505 minutes */
+    /* Noon              -  791 minutes */
+    /* EveningGoldenHour - 1076 minutes */
+    /* Set               - 1120 minutes */
+    /* EveningBlueHour   - 1140 minutes */
+    /* Night             - 1153 minutes */
+
+    time_point_t time_points[] =
+    {
+        [TIME_IDX_MIDNIGHT]            = {   0,  429},
+        [TIME_IDX_MORNING_BLUE_HOUR]   = { 429,   13},
+        [TIME_IDX_MORNING_GOLDEN_HOUR] = { 442,   19},
+        [TIME_IDX_RISE]                = { 461,   44},
+        [TIME_IDX_DAY]                 = { 505,  286},
+        [TIME_IDX_NOON]                = { 791,  285},
+        [TIME_IDX_EVENING_GOLDEN_HOUR] = {1076,   44},
+        [TIME_IDX_SET]                 = {1120,   20},
+        [TIME_IDX_EVENING_BLUE_HOUR]   = {1140,   13},
+        [TIME_IDX_NIGHT]               = {1153,  287},
+    };
+
+    /* Start             - RGB(0,0,32)    - RGB(0,0,44)      - Smooth      -  429 */
+    /* MorningBlueHour   - RGB(0,0,44)    - RGB(64,0,56)     - Rainbow CW  -   13 */
+    /* MorningGoldenHour - RGB(64,0,56)   - RGB(220,220,0)   - Rainbow CW  -   19 */
+    /* Rise              -                -                  -             -  +44 */
+    /* Day               - RGB(220,220,0) - RGB(255,255,255) - Sine        -  286 */
+    /* Noon              -                -                  -             - +286 */
+    /* EveningGoldenHour - RGB(220,220,0) - RGB( 64,0,56)    - Rainbow CCW -   44 */
+    /* Set               -                -                  -             -  +20 */
+    /* EveningBlueHour   - RGB(64,0,56)   - RGB(0,0,44)      - Rainbow CCW -   13 */
+    /* Night             - RGB(0,0,44)    - RGB(0,0,32)      - None        -  287 */
+
+    rgb_tx_t rgbStart             = {RGBA(0,0,32,1),    RGBA(0,0,44,1),    LED_CMD_RGB_INDICATE_COLOR};
+    rgb_tx_t rgbMorningBlueHour   = {RGBA(0,0,44,0),    RGBA(64,0,56,1),   LED_CMD_RGB_INDICATE_RAINBOW};
+    rgb_tx_t rgbMorningGoldenHour = {RGBA(64,0,56,0),   RGBA(220,220,0,1), LED_CMD_RGB_INDICATE_RAINBOW};
+    rgb_tx_t rgbDay               = {RGBA(220,220,0,1), RGBA(10,10,10,1),  LED_CMD_RGB_INDICATE_SINE};
+    rgb_tx_t rgbEveningGoldenHour = {RGBA(220,220,0,1), RGBA(64,0,56,0),   LED_CMD_RGB_INDICATE_RAINBOW};
+    rgb_tx_t rgbEveningBlueHour   = {RGBA(64,0,56,1),   RGBA(0,0,44,0),    LED_CMD_RGB_INDICATE_RAINBOW};
+    rgb_tx_t rgbNight             = {RGBA(0,0,44,1),    RGBA(0,0,32,1),    LED_CMD_RGB_INDICATE_COLOR};
+
+    rgb_point_t rgb_points[] =
+    {
+        [TIME_IDX_MIDNIGHT]            = {&rgbStart,             429},
+        [TIME_IDX_MORNING_BLUE_HOUR]   = {&rgbMorningBlueHour,    13},
+        [TIME_IDX_MORNING_GOLDEN_HOUR] = {&rgbMorningGoldenHour,  63},
+        [TIME_IDX_RISE]                = {NULL,                    0},
+        [TIME_IDX_DAY]                 = {&rgbDay,               572},
+        [TIME_IDX_NOON]                = {NULL,                    0},
+        [TIME_IDX_EVENING_GOLDEN_HOUR] = {&rgbEveningGoldenHour,  64},
+        [TIME_IDX_SET]                 = {NULL,                    0},
+        [TIME_IDX_EVENING_BLUE_HOUR]   = {&rgbEveningBlueHour,    13},
+        [TIME_IDX_NIGHT]               = {&rgbNight,             287},
+    };
+
+    /*                        ---------                         <---- Longest Day (UV/W max)    */
+    /*                    ----         ----                                                     */
+    /*                 ---                 ---                                                  */
+    /*              ---                       ---                                               */
+    /*            --                             --                                             */
+    /*          --                                 --                                           */
+    /*       ---              ---------              ---        <---- Shortest Day (UV/W min)   */
+    /*    ---     ------------         ------------     ---                                     */
+    /* -----------                                 -----------                                  */
+    /* Day ------------------------------------------------> Evening Golden Hour                */
+    /*                                                                                          */
+    /* duration = (evening_golden_hour - day);                                                  */
+    /* percent = (duration-SHORTEST_DAY_DURATION)/(LONGEST_DAY_DURATION-SHORTEST_DAY_DURATION); */
+    /* UV = (UV_MIN + (UV_MAX - UV_MIN) * percent);                                             */
+    /* W = (W_MIN + (W_MAX - W_MIN) * percent);                                                 */
+    /*                                                                                          */
+    /* Start             - UW(0,0)     - Smooth -  429 */
+    /* MorningBlueHour   -             -        -  +13 */
+    /* MorningGoldenHour -             -        -  +19 */
+    /* Rise              -             -        -  +44 */
+    /* Day               - UW(110,180) - Sine   -  286 */
+    /* Noon              -             -        - +286 */
+    /* EveningGoldenHour - UW(0,0)     - Smooth -   44 */
+    /* Set               -             -        -  +20 */
+    /* EveningBlueHour   -             -        -  +13 */
+    /* Night             -             -        - +287 */
+
+    uw_tx_t uwStart             = {LED_CMD_UV_INDICATE_BRIGHTNESS, 0, LED_CMD_W_INDICATE_BRIGHTNESS, 0};
+    uw_tx_t uwDay               = {LED_CMD_UV_INDICATE_SINE, 110, LED_CMD_W_INDICATE_SINE, 180};
+    uw_tx_t uwEveningGoldenHour = {LED_CMD_UV_INDICATE_BRIGHTNESS, 0, LED_CMD_W_INDICATE_BRIGHTNESS, 0};
+
+    uw_point_t uw_points[] =
+    {
+        [TIME_IDX_MIDNIGHT]            = {&uwStart,             0},
+        [TIME_IDX_MORNING_BLUE_HOUR]   = {NULL,                 0},
+        [TIME_IDX_MORNING_GOLDEN_HOUR] = {NULL,                 0},
+        [TIME_IDX_RISE]                = {NULL,                 0},
+        [TIME_IDX_DAY]                 = {&uwDay,             572},
+        [TIME_IDX_NOON]                = {NULL,                 0},
+        [TIME_IDX_EVENING_GOLDEN_HOUR] = {&uwEveningGoldenHour, 0},
+        [TIME_IDX_SET]                 = {NULL,                 0},
+        [TIME_IDX_EVENING_BLUE_HOUR]   = {NULL,                 0},
+        [TIME_IDX_NIGHT]               = {NULL,                 0},
+    };
+
+    fan_tx_t fanMorning = {CLIMATE_CMD_FAN, FAN_SPEED_LOW,    true, 33, 10};
+    fan_tx_t fanOff     = {CLIMATE_CMD_FAN, FAN_SPEED_NONE,  false, 0,  0};
+    fan_tx_t fanDay     = {CLIMATE_CMD_FAN, FAN_SPEED_MEDIUM, true, 33, 11};
+    fan_tx_t fanEvening = {CLIMATE_CMD_FAN, FAN_SPEED_LOW,    true, 36, 10};
+
+    fan_tx_p fan_points[] =
+    {
+        [TIME_IDX_MIDNIGHT]            = &fanMorning,
+        [TIME_IDX_MORNING_BLUE_HOUR]   = &fanOff,
+        [TIME_IDX_MORNING_GOLDEN_HOUR] = NULL,
+        [TIME_IDX_RISE]                = NULL,
+        [TIME_IDX_DAY]                 = &fanDay,
+        [TIME_IDX_NOON]                = NULL,
+        [TIME_IDX_EVENING_GOLDEN_HOUR] = &fanOff,
+        [TIME_IDX_SET]                 = NULL,
+        [TIME_IDX_EVENING_BLUE_HOUR]   = NULL,
+        [TIME_IDX_NIGHT]               = &fanEvening,
+    };
+
+    humidifier_tx_t humidifierOn  = {CLIMATE_CMD_HUMIDIFY,  true, false, 35, 20};
+    humidifier_tx_t humidifierOff = {CLIMATE_CMD_HUMIDIFY, false, false,  0,  0};
+
+    humidifier_tx_p humidifier_points[] =
+    {
+        [TIME_IDX_MIDNIGHT]            = &humidifierOff,
+        [TIME_IDX_MORNING_BLUE_HOUR]   = &humidifierOn,
+        [TIME_IDX_MORNING_GOLDEN_HOUR] = NULL,
+        [TIME_IDX_RISE]                = NULL,
+        [TIME_IDX_DAY]                 = NULL,
+        [TIME_IDX_NOON]                = NULL,
+        [TIME_IDX_EVENING_GOLDEN_HOUR] = NULL,
+        [TIME_IDX_SET]                 = NULL,
+        [TIME_IDX_EVENING_BLUE_HOUR]   = &humidifierOn,
+        [TIME_IDX_NIGHT]               = NULL,
+    };
+
+    for (p = 0; p < TIME_IDX_MAX; p++)
+    {
+        uint32_t timeout = (time_points[p].interval) * 100;
+
+        if (NULL != rgb_points[p].transition)
+        {
+            memset(&led_msg, 0, sizeof(led_msg));
+            led_msg.command         = rgb_points[p].transition->cmd;
+            led_msg.src_color.dword = rgb_points[p].transition->src.dword;
+            led_msg.dst_color.dword = rgb_points[p].transition->dst.dword;
+            led_msg.interval        = (rgb_points[p].interval * 100);
+            led_msg.duration        = 0;
+            LED_Task_SendMsg(&led_msg);
+        }
+
+        if (NULL != uw_points[p].transition)
+        {
+            memset(&led_msg, 0, sizeof(led_msg));
+            led_msg.src_color.a = 0;
+            led_msg.interval    = (uw_points[p].interval * 100);
+            led_msg.duration    = 0;
+
+            led_msg.command     = uw_points[p].transition->u_cmd;
+            led_msg.dst_color.a = uw_points[p].transition->u_max;
+            LED_Task_SendMsg(&led_msg);
+
+            led_msg.command     = uw_points[p].transition->w_cmd;
+            led_msg.dst_color.a = uw_points[p].transition->w_max;
+            LED_Task_SendMsg(&led_msg);
+        }
+
+        if (NULL != fan_points[p])
+        {
+            memset(&clt_msg, 0, sizeof(clt_msg));
+            clt_msg.command  = fan_points[p]->cmd;
+            clt_msg.speed    = fan_points[p]->speed;
+            clt_msg.interval = (fan_points[p]->interval * 100);
+            clt_msg.duration = (fan_points[p]->duration * 100);
+            clt_msg.repeat   = fan_points[p]->repeat;
+            Climate_Task_SendMsg(&clt_msg);
+        }
+
+        if (NULL != humidifier_points[p])
+        {
+            memset(&clt_msg, 0, sizeof(clt_msg));
+            clt_msg.command  = humidifier_points[p]->cmd;
+            clt_msg.on       = humidifier_points[p]->on;
+            clt_msg.interval = (humidifier_points[p]->interval * 100);
+            clt_msg.duration = (humidifier_points[p]->duration * 100);
+            clt_msg.repeat   = humidifier_points[p]->repeat;
+            Climate_Task_SendMsg(&clt_msg);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(timeout));
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+
 void Time_Task_Test(void)
 {
     time_Test_Calculations();
     time_Test_Alarm();
+    time_Test_DayNight();
 }
 
 //-------------------------------------------------------------------------------------------------
