@@ -18,7 +18,7 @@
 
 #define CLIMATE_TASK_TICK_MS   (pdMS_TO_TICKS(1000))
 
-#define CLT_LOG  1
+#define CLT_LOG  0
 
 #if (1 == CLT_LOG)
 static const char * gTAG = "CLIMATE";
@@ -94,6 +94,10 @@ static sensors_t     gSensors      = {0};
 
 static void clt_ProcessFAN(void)
 {
+    enum
+    {
+        FAN_POWER_ON_TIMEOUT = 250,
+    };
     if (CLIMATE_CMD_EMPTY != gFAN.command)
     {
         if ((0 < gFAN.time.duration) && (gFAN.time.duration < gFAN.time.interval))
@@ -101,6 +105,8 @@ static void clt_ProcessFAN(void)
             if (0 == gFAN.time.counter)
             {
                 CLT_LOGI("FAN Speed: %d - C: %lu", gFAN.speed, gFAN.time.counter);
+                FAN_SetSpeed(FAN_SPEED_FULL);
+                vTaskDelay(pdMS_TO_TICKS(FAN_POWER_ON_TIMEOUT));
                 FAN_SetSpeed(gFAN.speed);
             }
             else if (gFAN.time.duration == gFAN.time.counter)
@@ -124,6 +130,11 @@ static void clt_ProcessFAN(void)
         else
         {
             CLT_LOGI("FAN Speed: %d - Permanent", gFAN.speed);
+            if (FAN_SPEED_NONE < gFAN.speed)
+            {
+                FAN_SetSpeed(FAN_SPEED_FULL);
+                vTaskDelay(pdMS_TO_TICKS(FAN_POWER_ON_TIMEOUT));
+            }
             FAN_SetSpeed(gFAN.speed);
             memset(&gFAN, 0, sizeof(gFAN));
         }
@@ -136,7 +147,8 @@ static void clt_ProcessHumidifier(void)
 {
     if (CLIMATE_CMD_EMPTY != gHumidifier.command)
     {
-        if ((0 < gHumidifier.time.duration) && 
+        if ((true == gHumidifier.on) &&
+            (0 < gHumidifier.time.duration) && 
             (gHumidifier.time.duration < gHumidifier.time.interval))
         {
             if (0 == gHumidifier.time.counter)

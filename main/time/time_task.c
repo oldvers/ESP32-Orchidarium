@@ -39,16 +39,24 @@ static const char * gTAG = "TIME";
 enum
 {
     /* Calculated for Dec 21 2024 14:00:00 (seconds) */
-    TIME_SHORTEST_DAY_DURATION = 22222,
+    TIME_SHORTEST_DAY_DURATION_S   = 22222,
     /* Calculated for Jun 21 2024 14:00:00 (seconds) */
-    TIME_LONGEST_DAY_DURATION  = 52666,
-    TIME_STR_MAX_LEN           = 28,
+    TIME_LONGEST_DAY_DURATION_S    = 52666,
+    TIME_STR_MAX_LEN               = 28,
     /* Whole 24 hours day duration (seconds) */
-    TIME_FULL_DAY_DURATION     = (24 * 60 * 60),
-    TIME_UV_MIN                = 25,
-    TIME_UV_MAX                = 150,
-    TIME_W_MIN                 = 170,
-    TIME_W_MAX                 = 230,
+    TIME_FULL_DAY_DURATION_S       = (24 * 60 * 60),
+    TIME_UV_BRIGHTNESS_MIN         = 25,
+    TIME_UV_BRIGHTNESS_MAX         = 150,
+    TIME_W_BRIGHTNESS_MIN          = 170,
+    TIME_W_BRIGHTNESS_MAX          = 230,
+    TIME_FAN_MORNING_PERCENT       = 4,
+    TIME_FAN_EVENING_PERCENT       = 5,
+    TIME_FAN_DAY_PERCENT_MIN       = 15,
+    TIME_FAN_DAY_PERCENT_MAX       = 26,
+    TIME_FAN_SLOT_DURATION_S       = (35 * 60),
+    TIME_FAN_MARGIN_DURATION_S     = (5 * 60),
+    TIME_HUMIDIFIER_MIN_DURATION_S = 23,
+    TIME_HUMIDIFIER_MAX_DURATION_S = 60,
 };
 
 enum
@@ -77,12 +85,12 @@ typedef struct
     led_color_t   src;
     led_color_t   dst;
     led_command_t cmd;
-} rgb_tx_t;
+} rgb_tx_t, * rgb_tx_p;
 
 typedef struct
 {
-    rgb_tx_t * transition;
-    uint32_t   interval;
+    rgb_tx_p transition;
+    uint32_t interval;
 } rgb_point_t;
 
 typedef struct
@@ -91,12 +99,12 @@ typedef struct
     uint8_t       u_max;
     led_command_t w_cmd;
     uint8_t       w_max;
-} uw_tx_t;
+} uw_tx_t, * uw_tx_p;
 
 typedef struct
 {
-    uw_tx_t * transition;
-    uint32_t  interval;
+    uw_tx_p  transition;
+    uint32_t interval;
 } uw_point_t;
 
 typedef struct
@@ -104,18 +112,28 @@ typedef struct
     climate_command_t cmd;
     fan_speed_t       speed;
     bool              repeat;
-    uint32_t          interval;
-    uint32_t          duration;
+    uint8_t           percent;
 } fan_tx_t, * fan_tx_p;
+
+typedef struct
+{
+    fan_tx_p transition;
+    uint32_t interval;
+} fan_point_t;
 
 typedef struct
 {
     climate_command_t cmd;
     bool              on;
     bool              repeat;
-    uint32_t          interval;
-    uint32_t          duration;
+    uint8_t           duration;
 } humidifier_tx_t, * humidifier_tx_p;
+
+typedef struct
+{
+    humidifier_tx_p transition;
+    uint32_t        interval;
+} humidifier_point_t;
 
 //-------------------------------------------------------------------------------------------------
 
@@ -289,6 +307,43 @@ static uw_point_t gUwPoints[] =
     [TIME_IDX_NIGHT]               = {NULL,                  0},
 };
 
+
+static fan_tx_t gFanMorning = {CLIMATE_CMD_FAN, FAN_SPEED_LOW,    true, 0};
+static fan_tx_t gFanOff     = {CLIMATE_CMD_FAN, FAN_SPEED_NONE,  false, 0};
+static fan_tx_t gFanDay     = {CLIMATE_CMD_FAN, FAN_SPEED_MEDIUM, true, 0};
+static fan_tx_t gFanEvening = {CLIMATE_CMD_FAN, FAN_SPEED_LOW,    true, 0};
+
+static fan_point_t gFanPoints[] =
+{
+    [TIME_IDX_MIDNIGHT]            = {&gFanMorning, 0},
+    [TIME_IDX_MORNING_BLUE_HOUR]   = {&gFanOff,     0},
+    [TIME_IDX_MORNING_GOLDEN_HOUR] = {NULL,         0},
+    [TIME_IDX_RISE]                = {NULL,         0},
+    [TIME_IDX_DAY]                 = {&gFanDay,     0},
+    [TIME_IDX_NOON]                = {NULL,         0},
+    [TIME_IDX_EVENING_GOLDEN_HOUR] = {&gFanOff,     0},
+    [TIME_IDX_SET]                 = {NULL,         0},
+    [TIME_IDX_EVENING_BLUE_HOUR]   = {NULL,         0},
+    [TIME_IDX_NIGHT]               = {&gFanEvening, 0},
+};
+
+static humidifier_tx_t gHumidifierOn  = {CLIMATE_CMD_HUMIDIFY,  true, false, 0};
+static humidifier_tx_t gHumidifierOff = {CLIMATE_CMD_HUMIDIFY, false, false, 0};
+
+static humidifier_point_t gHumidifierPoints[] =
+{
+    [TIME_IDX_MIDNIGHT]            = {&gHumidifierOff, 0},
+    [TIME_IDX_MORNING_BLUE_HOUR]   = {&gHumidifierOn,  0},
+    [TIME_IDX_MORNING_GOLDEN_HOUR] = {&gHumidifierOff, 0},
+    [TIME_IDX_RISE]                = {NULL,            0},
+    [TIME_IDX_DAY]                 = {NULL,            0},
+    [TIME_IDX_NOON]                = {NULL,            0},
+    [TIME_IDX_EVENING_GOLDEN_HOUR] = {NULL,            0},
+    [TIME_IDX_SET]                 = {NULL,            0},
+    [TIME_IDX_EVENING_BLUE_HOUR]   = {&gHumidifierOn,  0},
+    [TIME_IDX_NIGHT]               = {&gHumidifierOff, 0},
+};
+
 //-------------------------------------------------------------------------------------------------
 
 static void time_SunCalculate(time_t time, double angle, time_t * p_m, time_t * p_e)
@@ -422,7 +477,7 @@ static void time_TimePointsCalculate(time_t start_t, time_t ref_t, struct tm * p
         if (TIME_IDX_NIGHT == point)
         {
             gTimePoints[point].start     = time_SunNight(ref_t);
-            gTimePoints[point].interval  = (start_t + TIME_FULL_DAY_DURATION);
+            gTimePoints[point].interval  = (start_t + TIME_FULL_DAY_DURATION_S);
             gTimePoints[point].interval -= gTimePoints[point].start;
         }
         else
@@ -517,10 +572,10 @@ static void time_UwPointsCalculate(void)
             {
                 value  = gTimePoints[TIME_IDX_EVENING_GOLDEN_HOUR].start;
                 value -= gTimePoints[TIME_IDX_DAY].start;
-                value -= TIME_SHORTEST_DAY_DURATION;
-                value *= (TIME_UV_MAX - TIME_UV_MIN);
-                value /= (TIME_LONGEST_DAY_DURATION - TIME_SHORTEST_DAY_DURATION);
-                value += TIME_UV_MIN;
+                value -= TIME_SHORTEST_DAY_DURATION_S;
+                value *= (TIME_UV_BRIGHTNESS_MAX - TIME_UV_BRIGHTNESS_MIN);
+                value /= (TIME_LONGEST_DAY_DURATION_S - TIME_SHORTEST_DAY_DURATION_S);
+                value += TIME_UV_BRIGHTNESS_MIN;
                 gUwPoints[point].transition->u_max = value;
             }
 
@@ -528,10 +583,10 @@ static void time_UwPointsCalculate(void)
             {
                 value  = gTimePoints[TIME_IDX_EVENING_GOLDEN_HOUR].start;
                 value -= gTimePoints[TIME_IDX_DAY].start;
-                value -= TIME_SHORTEST_DAY_DURATION;
-                value *= (TIME_W_MAX - TIME_W_MIN);
-                value /= (TIME_LONGEST_DAY_DURATION - TIME_SHORTEST_DAY_DURATION);
-                value += TIME_W_MIN;
+                value -= TIME_SHORTEST_DAY_DURATION_S;
+                value *= (TIME_W_BRIGHTNESS_MAX - TIME_W_BRIGHTNESS_MIN);
+                value /= (TIME_LONGEST_DAY_DURATION_S - TIME_SHORTEST_DAY_DURATION_S);
+                value += TIME_W_BRIGHTNESS_MIN;
                 gUwPoints[point].transition->w_max = value;
             }
 
@@ -549,6 +604,72 @@ static void time_UwPointsCalculate(void)
                 gUwPoints[point].transition->u_max,
                 gUwPoints[point].transition->w_max
             );
+        }
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void time_FanPointsCalculate(void)
+{
+    uint32_t interval = 0;
+    int      point    = 0;
+    uint32_t value    = 0;
+
+    TIME_LOGI("Calculation of FAN points  : -----------");
+
+    /* Set/calculate the FAN in time percents */
+    gFanMorning.percent = TIME_FAN_MORNING_PERCENT;
+    gFanEvening.percent = TIME_FAN_EVENING_PERCENT;
+    value  = gTimePoints[TIME_IDX_EVENING_GOLDEN_HOUR].start;
+    value -= gTimePoints[TIME_IDX_DAY].start;
+    value -= TIME_SHORTEST_DAY_DURATION_S;
+    value *= (TIME_FAN_DAY_PERCENT_MAX - TIME_FAN_DAY_PERCENT_MIN);
+    value /= (TIME_LONGEST_DAY_DURATION_S - TIME_SHORTEST_DAY_DURATION_S);
+    value += TIME_FAN_DAY_PERCENT_MIN;
+    gFanDay.percent = value;
+    TIME_LOGI("FAN Day Percent: %3lu %%", value);
+
+    for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
+    {
+        interval += gTimePoints[point].interval;
+        if (NULL != gFanPoints[point].transition)
+        {
+            gFanPoints[point].interval = interval;
+            interval = 0;
+            TIME_LOGI("[%d] - Interval: %5lu s", point, gFanPoints[point].interval);
+        }
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void time_HumidifierPointsCalculate(void)
+{
+    uint32_t interval = 0;
+    int      point    = 0;
+    uint32_t value    = 0;
+
+    TIME_LOGI("Calculation of HUM points  : -----------");
+
+    /* Calculate the Humidification duration */
+    value  = gTimePoints[TIME_IDX_EVENING_GOLDEN_HOUR].start;
+    value -= gTimePoints[TIME_IDX_DAY].start;
+    value -= TIME_SHORTEST_DAY_DURATION_S;
+    value *= (TIME_HUMIDIFIER_MAX_DURATION_S - TIME_HUMIDIFIER_MIN_DURATION_S);
+    value /= (TIME_LONGEST_DAY_DURATION_S - TIME_SHORTEST_DAY_DURATION_S);
+    value += TIME_HUMIDIFIER_MIN_DURATION_S;
+    gHumidifierOn.duration = value;
+    TIME_LOGI("Humidifier Duration: %3lu s", value);
+
+    for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
+    {
+        interval += gTimePoints[point].interval;
+        if (NULL != gHumidifierPoints[point].transition)
+        {
+            gHumidifierPoints[point].interval = interval;
+            interval = 0;
+            TIME_LOGI("[%d] - Interval: %5lu s", point, gHumidifierPoints[point].interval);
         }
     }
 }
@@ -595,6 +716,10 @@ static void time_PointsCalculate(time_t t, struct tm * p_dt, char * p_str)
     time_RgbPointsCalculate();
 
     time_UwPointsCalculate();
+
+    time_FanPointsCalculate();
+
+    time_HumidifierPointsCalculate();
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -746,6 +871,103 @@ static void time_Sun(time_t t, struct tm * p_dt, char * p_str, FW_BOOLEAN pre_tr
 
 //-------------------------------------------------------------------------------------------------
 
+static void time_ClimateFan(time_t t, struct tm * p_dt, char * p_str)
+{
+    climate_message_t msg      = {0};
+    uint8_t           count    = 0;
+    int               point    = 0;
+    uint32_t          interval = UINT32_MAX;
+    uint32_t          duration = UINT32_MAX;
+
+    for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
+    {
+        /* Find the appropriate time point */
+        if ((t >= gTimePoints[point].start) && (NULL != gFanPoints[point].transition))
+        {
+            /* Prepare the FAN message */
+            msg.command = gFanPoints[point].transition->cmd;
+            msg.speed   = gFanPoints[point].transition->speed;
+            msg.repeat  = gFanPoints[point].transition->repeat;
+
+            if (FAN_SPEED_NONE < gFanPoints[point].transition->speed)
+            {
+                /* The remaining time to the next time point */
+                interval = (gTimePoints[point].start + gTimePoints[point].interval - t);
+                /* Determine the count of remaining time slots */
+                count = (interval / TIME_FAN_SLOT_DURATION_S);
+                if (0 < count)
+                {
+                    /* Determine the FAN time interval */
+                    interval = (1000 * ((interval + TIME_FAN_MARGIN_DURATION_S) / count));
+                    /* Determine the FAN time duration */
+                    duration = ((gFanPoints[point].transition->percent * interval) / 100);
+                    /* Setup the message */
+                    msg.interval = interval;
+                    msg.duration = duration;
+                }
+                else
+                {
+                    msg.speed = FAN_SPEED_NONE;
+                }
+            }
+            TIME_LOGI
+            (
+                "[%d] - Interval/Duration FAN: %12lu - %lu - S: %d",
+                point,
+                msg.interval,
+                msg.duration,
+                msg.speed
+            );
+            Climate_Task_SendMsg(&msg);
+            /* Skip the rest of time points */
+            break;
+        }
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void time_ClimateHumidifier(time_t t, struct tm * p_dt, char * p_str)
+{
+    climate_message_t msg      = {0};
+    int               point    = 0;
+
+    for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
+    {
+        /* Find the appropriate time point */
+        if ((t >= gTimePoints[point].start) && (NULL != gHumidifierPoints[point].transition))
+        {
+            /* Prepare the Humidifier message */
+            msg.command  = gHumidifierPoints[point].transition->cmd;
+            msg.on       = gHumidifierPoints[point].transition->on;
+            msg.repeat   = gHumidifierPoints[point].transition->repeat;
+            msg.interval = gTimePoints[point].interval;
+            msg.duration = gHumidifierPoints[point].transition->duration;
+            TIME_LOGI
+            (
+                "[%d] - Interval/Duration HUM: %12lu - %lu - On: %d",
+                point,
+                msg.interval,
+                msg.duration,
+                msg.on
+            );
+            Climate_Task_SendMsg(&msg);
+            /* Skip the rest of time points */
+            break;
+        }
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void time_Climate(time_t t, struct tm * p_dt, char * p_str)
+{
+    time_ClimateFan(t, p_dt, p_str);
+    time_ClimateHumidifier(t, p_dt, p_str);
+}
+
+//-------------------------------------------------------------------------------------------------
+
 static void time_SetAlarm(time_t t, struct tm * p_dt, char * p_str)
 {
     char    string[TIME_STR_MAX_LEN] = {0};
@@ -781,6 +1003,7 @@ static void time_ProcessMsg(time_message_t * p_msg, time_t t, struct tm * p_dt, 
         time_PointsCalculate(t, p_dt, p_str);
         time_SetAlarm(t, p_dt, p_str);
         time_Sun(t, p_dt, p_str, FW_TRUE);
+        time_Climate(t, p_dt, p_str);
     }
 }
 
@@ -808,6 +1031,7 @@ static void time_CheckForAlarms(time_t t, struct tm * p_dt, char * p_str)
                 time_PointsCalculate(t, p_dt, p_str);
                 time_SetAlarm(t, p_dt, p_str);
                 time_Sun(t, p_dt, p_str, FW_TRUE);
+                time_Climate(t, p_dt, p_str);
             }
         }
         else
@@ -823,6 +1047,7 @@ static void time_CheckForAlarms(time_t t, struct tm * p_dt, char * p_str)
                 );
                 time_SetAlarm(t, p_dt, p_str);
                 time_Sun(t, p_dt, p_str, FW_TRUE);
+                time_Climate(t, p_dt, p_str);
             }
         }
     }
@@ -1266,40 +1491,40 @@ static void time_Test_DayNight(void)
         [TIME_IDX_NIGHT]               = {NULL,                 0},
     };
 
-    fan_tx_t fanMorning = {CLIMATE_CMD_FAN, FAN_SPEED_LOW,    true, 33, 10};
-    fan_tx_t fanOff     = {CLIMATE_CMD_FAN, FAN_SPEED_NONE,  false, 0,  0};
-    fan_tx_t fanDay     = {CLIMATE_CMD_FAN, FAN_SPEED_MEDIUM, true, 33, 11};
-    fan_tx_t fanEvening = {CLIMATE_CMD_FAN, FAN_SPEED_LOW,    true, 36, 10};
+    fan_tx_t fanMorning = {CLIMATE_CMD_FAN, FAN_SPEED_LOW,    true, 33};
+    fan_tx_t fanOff     = {CLIMATE_CMD_FAN, FAN_SPEED_NONE,  false,  0};
+    fan_tx_t fanDay     = {CLIMATE_CMD_FAN, FAN_SPEED_MEDIUM, true, 35};
+    fan_tx_t fanEvening = {CLIMATE_CMD_FAN, FAN_SPEED_LOW,    true, 35};
 
-    fan_tx_p fan_points[] =
+    fan_point_t fan_points[] =
     {
-        [TIME_IDX_MIDNIGHT]            = &fanMorning,
-        [TIME_IDX_MORNING_BLUE_HOUR]   = &fanOff,
-        [TIME_IDX_MORNING_GOLDEN_HOUR] = NULL,
-        [TIME_IDX_RISE]                = NULL,
-        [TIME_IDX_DAY]                 = &fanDay,
-        [TIME_IDX_NOON]                = NULL,
-        [TIME_IDX_EVENING_GOLDEN_HOUR] = &fanOff,
-        [TIME_IDX_SET]                 = NULL,
-        [TIME_IDX_EVENING_BLUE_HOUR]   = NULL,
-        [TIME_IDX_NIGHT]               = &fanEvening,
+        [TIME_IDX_MIDNIGHT]            = {&fanMorning, 429},
+        [TIME_IDX_MORNING_BLUE_HOUR]   = {&fanOff,      76},
+        [TIME_IDX_MORNING_GOLDEN_HOUR] = {NULL,          0},
+        [TIME_IDX_RISE]                = {NULL,          0},
+        [TIME_IDX_DAY]                 = {&fanDay,     572},
+        [TIME_IDX_NOON]                = {NULL,          0},
+        [TIME_IDX_EVENING_GOLDEN_HOUR] = {&fanOff,      77},
+        [TIME_IDX_SET]                 = {NULL,          0},
+        [TIME_IDX_EVENING_BLUE_HOUR]   = {NULL,          0},
+        [TIME_IDX_NIGHT]               = {&fanEvening, 287},
     };
 
-    humidifier_tx_t humidifierOn  = {CLIMATE_CMD_HUMIDIFY,  true, false, 35, 20};
-    humidifier_tx_t humidifierOff = {CLIMATE_CMD_HUMIDIFY, false, false,  0,  0};
+    humidifier_tx_t humidifierOn  = {CLIMATE_CMD_HUMIDIFY,  true, false, 20};
+    humidifier_tx_t humidifierOff = {CLIMATE_CMD_HUMIDIFY, false, false,  0};
 
-    humidifier_tx_p humidifier_points[] =
+    humidifier_point_t humidifier_points[] =
     {
-        [TIME_IDX_MIDNIGHT]            = &humidifierOff,
-        [TIME_IDX_MORNING_BLUE_HOUR]   = &humidifierOn,
-        [TIME_IDX_MORNING_GOLDEN_HOUR] = NULL,
-        [TIME_IDX_RISE]                = NULL,
-        [TIME_IDX_DAY]                 = NULL,
-        [TIME_IDX_NOON]                = NULL,
-        [TIME_IDX_EVENING_GOLDEN_HOUR] = NULL,
-        [TIME_IDX_SET]                 = NULL,
-        [TIME_IDX_EVENING_BLUE_HOUR]   = &humidifierOn,
-        [TIME_IDX_NIGHT]               = NULL,
+        [TIME_IDX_MIDNIGHT]            = {&humidifierOff, 429},
+        [TIME_IDX_MORNING_BLUE_HOUR]   = {&humidifierOn,   13},
+        [TIME_IDX_MORNING_GOLDEN_HOUR] = {&humidifierOff, 699},
+        [TIME_IDX_RISE]                = {NULL,             0},
+        [TIME_IDX_DAY]                 = {NULL,             0},
+        [TIME_IDX_NOON]                = {NULL,             0},
+        [TIME_IDX_EVENING_GOLDEN_HOUR] = {NULL,             0},
+        [TIME_IDX_SET]                 = {NULL,             0},
+        [TIME_IDX_EVENING_BLUE_HOUR]   = {&humidifierOn,   13},
+        [TIME_IDX_NIGHT]               = {&humidifierOff, 287},
     };
 
     for (p = 0; p < TIME_IDX_MAX; p++)
@@ -1333,25 +1558,25 @@ static void time_Test_DayNight(void)
             LED_Task_SendMsg(&led_msg);
         }
 
-        if (NULL != fan_points[p])
+        if (NULL != fan_points[p].transition)
         {
             memset(&clt_msg, 0, sizeof(clt_msg));
-            clt_msg.command  = fan_points[p]->cmd;
-            clt_msg.speed    = fan_points[p]->speed;
-            clt_msg.interval = (fan_points[p]->interval * 100);
-            clt_msg.duration = (fan_points[p]->duration * 100);
-            clt_msg.repeat   = fan_points[p]->repeat;
+            clt_msg.command  = fan_points[p].transition->cmd;
+            clt_msg.speed    = fan_points[p].transition->speed;
+            clt_msg.interval = 6000;
+            clt_msg.duration = 2000;
+            clt_msg.repeat   = fan_points[p].transition->repeat;
             Climate_Task_SendMsg(&clt_msg);
         }
 
-        if (NULL != humidifier_points[p])
+        if (NULL != humidifier_points[p].transition)
         {
             memset(&clt_msg, 0, sizeof(clt_msg));
-            clt_msg.command  = humidifier_points[p]->cmd;
-            clt_msg.on       = humidifier_points[p]->on;
-            clt_msg.interval = (humidifier_points[p]->interval * 100);
-            clt_msg.duration = (humidifier_points[p]->duration * 100);
-            clt_msg.repeat   = humidifier_points[p]->repeat;
+            clt_msg.command  = humidifier_points[p].transition->cmd;
+            clt_msg.on       = humidifier_points[p].transition->on;
+            clt_msg.interval = 6000;
+            clt_msg.duration = 3000;
+            clt_msg.repeat   = humidifier_points[p].transition->repeat;
             Climate_Task_SendMsg(&clt_msg);
         }
 
