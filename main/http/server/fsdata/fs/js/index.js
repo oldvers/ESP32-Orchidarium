@@ -194,7 +194,7 @@ function onDayMeasurementsReceived(ts, hs, ps)
     console.log("Day Measurements: " + ts.length);
 
     let canvas = document.getElementById("chart-t");
-    let milisPerPixel = (23000 / canvas.width);
+    let milisPerPixel = (23000 * window.devicePixelRatio / canvas.width);
 
     chart_t.options.millisPerPixel = milisPerPixel;
     chart_h.options.millisPerPixel = milisPerPixel;
