@@ -17,6 +17,7 @@
 //-------------------------------------------------------------------------------------------------
 
 #define CLIMATE_TASK_TICK_MS   (pdMS_TO_TICKS(1000))
+#define CLIMATE_TASK_KEY       (0xFACECAFE)
 
 #define CLT_LOG  0
 
@@ -75,15 +76,22 @@ typedef struct
 
 typedef struct
 {
-    alarms_t                   alarms;
-    accumulator_t              acc_one_min;
-    accumulator_t              acc_one_hour;
-    climate_measurements_t     meas_min;
-    climate_day_measurements_t meas_day;
-    uint8_t                    hour;
+    climate_measurements_t     minute;
+    climate_day_measurements_t day;
+    uint32_t                   key;
+} measurements_t, * measurements_p;
+
+typedef struct
+{
+    alarms_t       alarms;
+    accumulator_t  acc_one_min;
+    accumulator_t  acc_one_hour;
+    measurements_p meas;
 } sensors_t;
 
 //-------------------------------------------------------------------------------------------------
+
+static measurements_t RTC_NOINIT_ATTR gMeasurements;
 
 static QueueHandle_t gClimateQueue = {0};
 static fan_t         gFAN          = {0};
@@ -256,15 +264,15 @@ static void clt_SensorsAcummulateMinute(void)
 
 static void clt_SensorsUpdateMinuteMeasurements(void)
 {
-    gSensors.meas_min.pressure =
+    gSensors.meas->minute.pressure =
     (
         gSensors.acc_one_min.pressure / gSensors.acc_one_min.count / 1000
     );
-    gSensors.meas_min.temperature =
+    gSensors.meas->minute.temperature =
     (
         gSensors.acc_one_min.temperature / gSensors.acc_one_min.count
     );
-    gSensors.meas_min.humidity =
+    gSensors.meas->minute.humidity =
     (
         gSensors.acc_one_min.humidity / gSensors.acc_one_min.count
     );
@@ -272,9 +280,9 @@ static void clt_SensorsUpdateMinuteMeasurements(void)
     CLT_LOGI
     (
         "Minute - T: %4u - H: %4u - P: %6lu",
-        gSensors.meas_min.temperature,
-        gSensors.meas_min.humidity,
-        gSensors.meas_min.pressure
+        gSensors.meas->min.temperature,
+        gSensors.meas->min.humidity,
+        gSensors.meas->min.pressure
     );
 }
 
@@ -299,34 +307,34 @@ void clt_SensorsUpdateHourMeasurements(void)
     size_t  size  = 0;
 
     /* Free the space for the latest element */
-    p_dst = &gSensors.meas_day.pressure[0];
-    p_src = &gSensors.meas_day.pressure[1];
-    size  = (sizeof(gSensors.meas_day.pressure) - sizeof(gSensors.meas_day.pressure[0]));
+    p_dst = &gSensors.meas->day.pressure[0];
+    p_src = &gSensors.meas->day.pressure[1];
+    size  = (sizeof(gSensors.meas->day.pressure) - sizeof(gSensors.meas->day.pressure[0]));
     memmove(p_dst, p_src, size);
     /* Store to the last item in array */
-    gSensors.meas_day.pressure[idx] =
+    gSensors.meas->day.pressure[idx] =
     (
         gSensors.acc_one_hour.pressure / gSensors.acc_one_hour.count / 1000
     );
 
     /* Free the space for the latest element */
-    p_dst = &gSensors.meas_day.temperature[0];
-    p_src = &gSensors.meas_day.temperature[1];
-    size  = (sizeof(gSensors.meas_day.temperature) - sizeof(gSensors.meas_day.temperature[0]));
+    p_dst = &gSensors.meas->day.temperature[0];
+    p_src = &gSensors.meas->day.temperature[1];
+    size  = (sizeof(gSensors.meas->day.temperature) - sizeof(gSensors.meas->day.temperature[0]));
     memmove(p_dst, p_src, size);
     /* Store to the last item in array */
-    gSensors.meas_day.temperature[idx] =
+    gSensors.meas->day.temperature[idx] =
     (
         gSensors.acc_one_hour.temperature / gSensors.acc_one_hour.count
     );
 
     /* Free the space for the latest element */
-    p_dst = &gSensors.meas_day.humidity[0];
-    p_src = &gSensors.meas_day.humidity[1];
-    size  = (sizeof(gSensors.meas_day.humidity) - sizeof(gSensors.meas_day.humidity[0]));
+    p_dst = &gSensors.meas->day.humidity[0];
+    p_src = &gSensors.meas->day.humidity[1];
+    size  = (sizeof(gSensors.meas->day.humidity) - sizeof(gSensors.meas->day.humidity[0]));
     memmove(p_dst, p_src, size);
     /* Store to the last item in array */
-    gSensors.meas_day.humidity[idx] =
+    gSensors.meas->day.humidity[idx] =
     (
         gSensors.acc_one_hour.humidity / gSensors.acc_one_hour.count
     );
@@ -336,9 +344,9 @@ void clt_SensorsUpdateHourMeasurements(void)
     CLT_LOGI
     (
         "Hour - T: %4u - H: %4u - P: %6lu",
-        gSensors.meas_day.temperature[idx],
-        gSensors.meas_day.humidity[idx],
-        gSensors.meas_day.pressure[idx]
+        gSensors.meas->day.temperature[idx],
+        gSensors.meas->day.humidity[idx],
+        gSensors.meas->day.pressure[idx]
     );
 }
 
@@ -425,6 +433,21 @@ static void clt_ProcessMsg(climate_message_p p_msg)
 
 //-------------------------------------------------------------------------------------------------
 
+void clt_Sensors_Init(void)
+{
+    /* Initialize the measurements if needed */
+    if (CLIMATE_TASK_KEY != gMeasurements.key)
+    {
+        memset(&gMeasurements, 0, sizeof(gMeasurements));
+        gMeasurements.key = CLIMATE_TASK_KEY;
+    }
+
+    /* Initialize the link to the measurements */
+    gSensors.meas = &gMeasurements;
+}
+
+//-------------------------------------------------------------------------------------------------
+
 static void vClimate_Task(void * pvParameters)
 {
     BaseType_t        status = pdFAIL;
@@ -436,6 +459,7 @@ static void vClimate_Task(void * pvParameters)
     Humidifier_Init();
     Humidifier_PowerOn();
 
+    clt_Sensors_Init();
     clt_SetSensorsAlarms();
 
     while (FW_TRUE)
@@ -492,7 +516,7 @@ bool Climate_Task_IsHumidifierOn(void)
 void Climate_Task_GetMeasurements(climate_measurements_p p_meas)
 {
     /* This call is not thread safe but this is acceptable */
-    memcpy(p_meas, &gSensors.meas_min, sizeof(gSensors.meas_min));
+    memcpy(p_meas, &gSensors.meas->minute, sizeof(gSensors.meas->minute));
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -500,7 +524,7 @@ void Climate_Task_GetMeasurements(climate_measurements_p p_meas)
 void Climate_Task_GetDayMeasurements(climate_day_measurements_p p_meas)
 {
     /* This call is not thread safe but this is acceptable */
-    memcpy(p_meas, &gSensors.meas_day, sizeof(gSensors.meas_day));
+    memcpy(p_meas, &gSensors.meas->day, sizeof(gSensors.meas->day));
 }
 
 //-------------------------------------------------------------------------------------------------
