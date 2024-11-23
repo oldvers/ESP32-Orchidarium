@@ -54,6 +54,8 @@ wss.on("connection", ws =>
 {
     console.log("New client connected");
  
+    var counter = 0;
+
     function onGetConnectionParameters()
     {
         console.log("Rx: Get connection parameters");
@@ -144,9 +146,17 @@ wss.on("connection", ws =>
         let dts = dt.toUTCString();
         console.log("Rx: Get status - " + dts);
 
-        let len = (19 + 1 + dts.length);
+        let len = (20 + 1 + dts.length);
         let buffer = new ArrayBuffer(len);
         let view = new DataView(buffer);
+        let refresh = 0;
+
+        counter++;
+        if (15 <= counter)
+        {
+            refresh = 1;
+            counter = 0;
+        }
 
         view.setUint8(0, wsProtocol.getStatus); /* Command */
         view.setUint8(1, wsProtocol.success); /* Status */
@@ -159,10 +169,11 @@ wss.on("connection", ws =>
         view.setUint8(8, 240); /* Fito */
         view.setUint8(9, 2); /* FAN */
         view.setUint8(10, 1); /* Humidifier */
-        view.setUint32(11, (90000 + Math.random() * 20000), true); /* Pressure */
-        view.setInt16(15, (Math.random() * 3500), true); /* Temperature */
-        view.setUint16(17, (Math.random() * 9500), true); /* Humidity */
-        putStrInBuffer(view, 19, dts); /* Date-time string */
+        view.setUint8(11, refresh); /* Refresh */
+        view.setUint32(12, (90000 + Math.random() * 20000), true); /* Pressure */
+        view.setInt16(16, (Math.random() * 3500), true); /* Temperature */
+        view.setUint16(18, (Math.random() * 9500), true); /* Humidity */
+        putStrInBuffer(view, 20, dts); /* Date-time string */
 
         ws.send(buffer);
     }

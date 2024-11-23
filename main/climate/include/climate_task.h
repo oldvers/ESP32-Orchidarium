@@ -52,6 +52,7 @@ fan_speed_t Climate_Task_GetFanSpeed(void);
 bool        Climate_Task_IsHumidifierOn(void);
 void        Climate_Task_GetMeasurements(climate_measurements_p p_meas);
 void        Climate_Task_GetDayMeasurements(climate_day_measurements_p p_meas);
+bool        Climate_Task_IsNewDayMeasurementsAvailable(void);
 void        Climate_Task_Test(void);
 
 #endif /* __CLIMATE_TASK_H__ */

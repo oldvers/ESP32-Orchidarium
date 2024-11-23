@@ -88,6 +88,7 @@ typedef struct
     uint8_t       fito;
     uint8_t       fan;
     uint8_t       humidifier;
+    uint8_t       refresh;
     uint32_t      pressure;
     uint16_t      temperature;
     uint16_t      humidity;
@@ -395,6 +396,7 @@ static void ctrl_GetStatus(ctrl_req_p p_req, ctrl_rsp_p p_rsp, uint16_t * p_rsp_
     p_rsp->status.fito        = LED_Task_GetCurrentFito();
     p_rsp->status.fan         = Climate_Task_GetFanSpeed();
     p_rsp->status.humidifier  = Climate_Task_IsHumidifierOn();
+    p_rsp->status.refresh     = Climate_Task_IsNewDayMeasurementsAvailable();
     Climate_Task_GetMeasurements(&meas);
     p_rsp->status.pressure        = meas.pressure;
     p_rsp->status.temperature     = meas.temperature;

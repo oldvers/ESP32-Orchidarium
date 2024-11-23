@@ -142,7 +142,7 @@ function onConnectionParametersReceived(ssid, pwd, site)
     //document.getElementById('site').innerText = site.value;
 }
 
-function onStatusReceived(sun, dts, color, uv, w, fito, fan, hf, p, t, h)
+function onStatusReceived(sun, dts, color, uv, w, fito, fan, hf, p, t, h, r)
 {
     updateStatusBox("success", dts);
 
@@ -181,7 +181,7 @@ function onStatusReceived(sun, dts, color, uv, w, fito, fan, hf, p, t, h)
         mode.needUiUpdate = false;
     }
     let canvas = document.getElementById("chart-t");
-    if (mode.width != canvas.width)
+    if ((mode.width != canvas.width) || (true == r))
     {
         controller.getDayMeasurements();
         mode.width = canvas.width;

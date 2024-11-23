@@ -87,6 +87,10 @@ typedef struct
     accumulator_t  acc_one_min;
     accumulator_t  acc_one_hour;
     measurements_p meas;
+    struct
+    {
+        uint8_t meas_updated : 1;
+    };
 } sensors_t;
 
 //-------------------------------------------------------------------------------------------------
@@ -341,6 +345,8 @@ void clt_SensorsUpdateHourMeasurements(void)
 
     memset(&gSensors.acc_one_hour, 0, sizeof(gSensors.acc_one_hour));
 
+    gSensors.meas_updated = true;
+
     CLT_LOGI
     (
         "Hour - T: %4u - H: %4u - P: %6lu",
@@ -525,6 +531,14 @@ void Climate_Task_GetDayMeasurements(climate_day_measurements_p p_meas)
 {
     /* This call is not thread safe but this is acceptable */
     memcpy(p_meas, &gSensors.meas->day, sizeof(gSensors.meas->day));
+    gSensors.meas_updated = false;
+}
+
+//-------------------------------------------------------------------------------------------------
+
+bool Climate_Task_IsNewDayMeasurementsAvailable(void)
+{
+    return gSensors.meas_updated;
 }
 
 //-------------------------------------------------------------------------------------------------

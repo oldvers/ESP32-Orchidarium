@@ -159,10 +159,11 @@
         let fito   = view.getUint8(8);
         let fan    = view.getUint8(9);
         let hf     = view.getUint8(10);
-        let p      = view.getUint32(11, true);
-        let t      = view.getInt16(15, true);
-        let h      = view.getUint16(17, true);
-        let dts    = Controller.getStrFromBuffer(view, 19);
+        let r      = view.getUint8(11);
+        let p      = view.getUint32(12, true);
+        let t      = view.getInt16(16, true);
+        let h      = view.getUint16(18, true);
+        let dts    = Controller.getStrFromBuffer(view, 20);
         let sun    = true;
 
         console.log("WS: Color = " + color.r + ":" + color.g + ":" + color.b + " - " + dts.value);
@@ -173,7 +174,7 @@
         }
         if (NaN != this.onStatusReceived)
         {
-            this.onStatusReceived(sun, dts.value, color, uv, w, fito, fan, hf, p, t, h);
+            this.onStatusReceived(sun, dts.value, color, uv, w, fito, fan, hf, p, t, h, r);
         }
     }
 
