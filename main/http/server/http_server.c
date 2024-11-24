@@ -325,8 +325,8 @@ static void ctrl_SetColor(ctrl_req_p p_req, ctrl_rsp_p p_rsp)
     led_message_t led_msg =
     {
         .command   = LED_CMD_RGB_INDICATE_COLOR,
-        .src_color = {.bytes = {0}},
-        .dst_color = {.r = p_req->color.r, .g = p_req->color.g, .b = p_req->color.b},
+        .src.color = {.bytes = {0}},
+        .dst.color = {.r = p_req->color.r, .g = p_req->color.g, .b = p_req->color.b},
         .interval  = 0,
         .duration  = 0
     };
@@ -422,8 +422,8 @@ static void ctrl_SetUltraViolet(ctrl_req_p p_req, ctrl_rsp_p p_rsp)
     led_message_t led_msg =
     {
         .command     = LED_CMD_UV_INDICATE_BRIGHTNESS,
-        .src_color.a = 0,
-        .dst_color.a = p_req->value,
+        .src.color.a = 0,
+        .dst.color.a = p_req->value,
         .interval    = 0,
         .duration    = 0
     };
@@ -448,8 +448,8 @@ static void ctrl_SetWhite(ctrl_req_p p_req, ctrl_rsp_p p_rsp)
     led_message_t led_msg =
     {
         .command     = LED_CMD_W_INDICATE_BRIGHTNESS,
-        .src_color.a = 0,
-        .dst_color.a = p_req->value,
+        .src.color.a = 0,
+        .dst.color.a = p_req->value,
         .interval    = 0,
         .duration    = 0
     };
@@ -474,8 +474,8 @@ static void ctrl_SetFito(ctrl_req_p p_req, ctrl_rsp_p p_rsp)
     led_message_t led_msg =
     {
         .command     = LED_CMD_F_INDICATE_BRIGHTNESS,
-        .src_color.a = 0,
-        .dst_color.a = p_req->value,
+        .src.color.a = 0,
+        .dst.color.a = p_req->value,
         .interval    = 0,
         .duration    = 0
     };
@@ -688,7 +688,7 @@ void HTTP_Server_Init(bool config)
     HTTPS_LOGI("HTTP Config = %d", gConfig);
 
     /* Initialize task */
-    (void)xTaskCreatePinnedToCore(vHTTP_Server_Task, "HTTP Server", 6144, NULL, 2, NULL, CORE0);
+    (void)xTaskCreatePinnedToCore(vHTTP_Server_Task, "HTTP Server", 8192, NULL, 2, NULL, CORE0);
 }
 
 //-------------------------------------------------------------------------------------------------

@@ -747,8 +747,8 @@ static void time_SunRgb(time_t curr_t, FW_BOOLEAN pre_tx, led_message_p p_rgb_ms
 
             /* Prepare the indication message */
             p_rgb_msg->command         = gRgbPoints[point].transition->cmd;
-            p_rgb_msg->src_color.dword = gRgbPoints[point].transition->src.dword;
-            p_rgb_msg->dst_color.dword = gRgbPoints[point].transition->dst.dword;
+            p_rgb_msg->src.color.dword = gRgbPoints[point].transition->src.dword;
+            p_rgb_msg->dst.color.dword = gRgbPoints[point].transition->dst.dword;
             p_rgb_msg->interval        = interval;
             p_rgb_msg->duration        = duration;
 
@@ -756,7 +756,7 @@ static void time_SunRgb(time_t curr_t, FW_BOOLEAN pre_tx, led_message_p p_rgb_ms
             {
                 LED_Task_DetermineColor(p_rgb_msg, &color);
                 pre_msg.command         = LED_CMD_RGB_INDICATE_COLOR;
-                pre_msg.dst_color.dword = color.dword;
+                pre_msg.dst.color.dword = color.dword;
                 pre_msg.interval        = TRANSITION_INTERVAL;
                 LED_Task_SendMsg(&pre_msg);
             }
@@ -796,29 +796,35 @@ static void time_SunUw
             TIME_LOGI("[%d] - Interval/Duration U/W: %12lu - %lu", point, interval, duration);
 
             /* Prepare the indication message */
-            p_u_msg->command     = gUwPoints[point].transition->u_cmd;
-            p_u_msg->src_color.a = 0;
-            p_u_msg->dst_color.a = gUwPoints[point].transition->u_max;
-            p_u_msg->interval    = interval;
-            p_u_msg->duration    = duration;
+            p_u_msg->command          = gUwPoints[point].transition->u_cmd;
+            p_u_msg->src.brightness.v = 0;
+            p_u_msg->src.brightness.a = 1;
+            p_u_msg->dst.brightness.v = gUwPoints[point].transition->u_max;
+            p_u_msg->dst.brightness.a = 1;
+            p_u_msg->interval         = interval;
+            p_u_msg->duration         = duration;
 
-            p_w_msg->command     = gUwPoints[point].transition->w_cmd;
-            p_w_msg->src_color.a = 0;
-            p_w_msg->dst_color.a = gUwPoints[point].transition->w_max;
-            p_w_msg->interval    = interval;
-            p_w_msg->duration    = duration;
+            p_w_msg->command          = gUwPoints[point].transition->w_cmd;
+            p_w_msg->src.brightness.v = 0;
+            p_u_msg->src.brightness.a = 1;
+            p_w_msg->dst.brightness.v = gUwPoints[point].transition->w_max;
+            p_u_msg->dst.brightness.a = 1;
+            p_w_msg->interval         = interval;
+            p_w_msg->duration         = duration;
 
             if (FW_TRUE == pre_tx)
             {
                 LED_Task_DetermineColor(p_u_msg, &color);
-                pre_msg.command     = LED_CMD_UV_INDICATE_BRIGHTNESS;
-                pre_msg.dst_color.a = color.a;
-                pre_msg.interval    = TRANSITION_INTERVAL;
+                pre_msg.command          = LED_CMD_UV_INDICATE_BRIGHTNESS;
+                pre_msg.dst.brightness.v = color.a;
+                pre_msg.dst.brightness.a = 1;
+                pre_msg.interval         = TRANSITION_INTERVAL;
                 LED_Task_SendMsg(&pre_msg);
 
                 LED_Task_DetermineColor(p_w_msg, &color);
-                pre_msg.command     = LED_CMD_W_INDICATE_BRIGHTNESS;
-                pre_msg.dst_color.a = color.a;
+                pre_msg.command          = LED_CMD_W_INDICATE_BRIGHTNESS;
+                pre_msg.dst.brightness.v = color.a;
+                pre_msg.dst.brightness.a = 1;
                 LED_Task_SendMsg(&pre_msg);
             }
             /* Skip the rest of time points */
@@ -941,8 +947,8 @@ static void time_ClimateHumidifier(time_t t, struct tm * p_dt, char * p_str)
             msg.command  = gHumidifierPoints[point].transition->cmd;
             msg.on       = gHumidifierPoints[point].transition->on;
             msg.repeat   = gHumidifierPoints[point].transition->repeat;
-            msg.interval = gTimePoints[point].interval;
-            msg.duration = gHumidifierPoints[point].transition->duration;
+            msg.interval = (gTimePoints[point].interval * 1000);
+            msg.duration = (gHumidifierPoints[point].transition->duration * 1000);
             TIME_LOGI
             (
                 "[%d] - Interval/Duration HUM: %12lu - %lu - On: %d",
@@ -1344,12 +1350,12 @@ static void time_Test_Alarm(void)
     /* Transition to DST color for 1100 ms */
     led_msg.command         = LED_CMD_RGB_INDICATE_COLOR;
     /* To - Red */
-    led_msg.dst_color.r     = 255;
-    led_msg.dst_color.g     = 0;
-    led_msg.dst_color.b     = 0;
-    led_msg.dst_color.a     = 0;
+    led_msg.dst.color.r     = 255;
+    led_msg.dst.color.g     = 0;
+    led_msg.dst.color.b     = 0;
+    led_msg.dst.color.a     = 0;
     /* From - Ignored */
-    led_msg.src_color.dword = 0;
+    led_msg.src.color.dword = 0;
     led_msg.interval        = 1100;
     led_msg.duration        = 0;
     LED_Task_SendMsg(&led_msg);
@@ -1535,8 +1541,8 @@ static void time_Test_DayNight(void)
         {
             memset(&led_msg, 0, sizeof(led_msg));
             led_msg.command         = rgb_points[p].transition->cmd;
-            led_msg.src_color.dword = rgb_points[p].transition->src.dword;
-            led_msg.dst_color.dword = rgb_points[p].transition->dst.dword;
+            led_msg.src.color.dword = rgb_points[p].transition->src.dword;
+            led_msg.dst.color.dword = rgb_points[p].transition->dst.dword;
             led_msg.interval        = (rgb_points[p].interval * 100);
             led_msg.duration        = 0;
             LED_Task_SendMsg(&led_msg);
@@ -1545,16 +1551,16 @@ static void time_Test_DayNight(void)
         if (NULL != uw_points[p].transition)
         {
             memset(&led_msg, 0, sizeof(led_msg));
-            led_msg.src_color.a = 0;
+            led_msg.src.color.a = 0;
             led_msg.interval    = (uw_points[p].interval * 100);
             led_msg.duration    = 0;
 
             led_msg.command     = uw_points[p].transition->u_cmd;
-            led_msg.dst_color.a = uw_points[p].transition->u_max;
+            led_msg.dst.color.a = uw_points[p].transition->u_max;
             LED_Task_SendMsg(&led_msg);
 
             led_msg.command     = uw_points[p].transition->w_cmd;
-            led_msg.dst_color.a = uw_points[p].transition->w_max;
+            led_msg.dst.color.a = uw_points[p].transition->w_max;
             LED_Task_SendMsg(&led_msg);
         }
 

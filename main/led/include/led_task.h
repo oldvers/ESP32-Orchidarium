@@ -25,9 +25,23 @@ typedef enum
 
 typedef struct
 {
+    uint8_t v;
+    uint8_t a;
+} led_brightness_t, * led_brightness_p;
+
+typedef struct
+{
     led_command_t command;
-    led_color_t   src_color;
-    led_color_t   dst_color;
+    union
+    {
+        led_color_t      color;
+        led_brightness_t brightness;
+    } src;
+    union
+    {
+        led_color_t      color;
+        led_brightness_t brightness;
+    } dst;
     uint32_t      interval;
     uint32_t      duration;
 } led_message_t, * led_message_p;

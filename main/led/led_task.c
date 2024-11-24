@@ -290,9 +290,9 @@ static void rgb_SetIndication_Color(led_message_p p_msg)
     };
 
     gLedsRgb.dst_color.dword = 0;
-    gLedsRgb.dst_color.r     = p_msg->dst_color.r;
-    gLedsRgb.dst_color.g     = p_msg->dst_color.g;
-    gLedsRgb.dst_color.b     = p_msg->dst_color.b;
+    gLedsRgb.dst_color.r     = p_msg->dst.color.r;
+    gLedsRgb.dst_color.g     = p_msg->dst.color.g;
+    gLedsRgb.dst_color.b     = p_msg->dst.color.b;
 
     /* Set the default tick interval to 30 ms */
     gLedsRgb.tick.interval = 3;
@@ -301,15 +301,15 @@ static void rgb_SetIndication_Color(led_message_p p_msg)
 
     /* Determine the SRC color */
     gLedsRgb.src_color.dword = 0;
-    if (0 == p_msg->src_color.a)
+    if (0 == p_msg->src.color.a)
     {
         LED_Strip_RGB_GetAverageColor(&gLedsRgb.src_color);
     }
     else
     {
-        gLedsRgb.src_color.r = p_msg->src_color.r;
-        gLedsRgb.src_color.g = p_msg->src_color.g;
-        gLedsRgb.src_color.b = p_msg->src_color.b;
+        gLedsRgb.src_color.r = p_msg->src.color.r;
+        gLedsRgb.src_color.g = p_msg->src.color.g;
+        gLedsRgb.src_color.b = p_msg->src.color.b;
     }
 
     /* Calculate the timer parameters */
@@ -358,9 +358,9 @@ static void rgb_SetIndication_RgbCirculation(led_message_p p_msg)
     LED_Strip_RGB_Clear();
 
     gLedsRgb.dst_color.dword = 0;
-    gLedsRgb.dst_color.r     = p_msg->dst_color.r;
-    gLedsRgb.dst_color.g     = p_msg->dst_color.g;
-    gLedsRgb.dst_color.b     = p_msg->dst_color.b;
+    gLedsRgb.dst_color.r     = p_msg->dst.color.r;
+    gLedsRgb.dst_color.g     = p_msg->dst.color.g;
+    gLedsRgb.dst_color.b     = p_msg->dst.color.b;
 
     /* Set the color depending on color settings */
     if (0 == gLedsRgb.dst_color.dword)
@@ -421,9 +421,9 @@ static void rgb_SetIndication_Fade(led_message_p p_msg)
     LED_Strip_RGB_Clear();
 
     gLedsRgb.dst_color.dword = 0;
-    gLedsRgb.dst_color.r     = p_msg->dst_color.r;
-    gLedsRgb.dst_color.g     = p_msg->dst_color.g;
-    gLedsRgb.dst_color.b     = p_msg->dst_color.b;
+    gLedsRgb.dst_color.r     = p_msg->dst.color.r;
+    gLedsRgb.dst_color.g     = p_msg->dst.color.g;
+    gLedsRgb.dst_color.b     = p_msg->dst.color.b;
 
     rgb_RGBtoHSV(&gLedsRgb.dst_color, &gLedsRgb.hsv);
     gLedsRgb.hsv.v  = 0.0;
@@ -460,9 +460,9 @@ static void rgb_SetIndication_PingPong(led_message_p p_msg)
     LED_Strip_RGB_Clear();
 
     gLedsRgb.dst_color.dword = 0;
-    gLedsRgb.dst_color.r     = p_msg->dst_color.r;
-    gLedsRgb.dst_color.g     = p_msg->dst_color.g;
-    gLedsRgb.dst_color.b     = p_msg->dst_color.b;
+    gLedsRgb.dst_color.r     = p_msg->dst.color.r;
+    gLedsRgb.dst_color.g     = p_msg->dst.color.g;
+    gLedsRgb.dst_color.b     = p_msg->dst.color.b;
     gLedsRgb.offset          = 0;
     gLedsRgb.led             = 0;
     LED_Strip_RGB_SetPixelColor(gLedsRgb.led, &gLedsRgb.dst_color);
@@ -490,9 +490,9 @@ static void rgb_SetIndication_RainbowCirculation(led_message_p p_msg)
     double max = 0.0;
 
     gLedsRgb.dst_color.dword = 0;
-    gLedsRgb.dst_color.r     = p_msg->dst_color.r;
-    gLedsRgb.dst_color.g     = p_msg->dst_color.g;
-    gLedsRgb.dst_color.b     = p_msg->dst_color.b;
+    gLedsRgb.dst_color.r     = p_msg->dst.color.r;
+    gLedsRgb.dst_color.g     = p_msg->dst.color.g;
+    gLedsRgb.dst_color.b     = p_msg->dst.color.b;
 
     if (0 == gLedsRgb.dst_color.dword)
     {
@@ -574,8 +574,8 @@ static void rgb_SetIndication_Rainbow(led_message_p p_msg)
     };
 
     /* Store the SRC/DST colors */
-    gLedsRgb.dst_color.dword = p_msg->dst_color.dword;
-    gLedsRgb.src_color.dword = p_msg->src_color.dword;
+    gLedsRgb.dst_color.dword = p_msg->dst.color.dword;
+    gLedsRgb.src_color.dword = p_msg->src.color.dword;
 
     /* Set the default tick interval to 30 ms */
     gLedsRgb.tick.interval = 3;
@@ -583,7 +583,7 @@ static void rgb_SetIndication_Rainbow(led_message_p p_msg)
     gLedsRgb.time.delta    = (gLedsRgb.tick.interval * LED_TASK_TICK_MS);
 
     /* Check the rainbow changing direction */
-    if (0 == (p_msg->src_color.a ^ p_msg->dst_color.a))
+    if (0 == (p_msg->src.color.a ^ p_msg->dst.color.a))
     {
         /* The direction is set incorrectly - get the current color */
         LED_Strip_RGB_GetAverageColor(&gLedsRgb.src_color);
@@ -647,9 +647,9 @@ static void rgb_SetIndication_Sine(led_message_p p_msg)
     };
 
     gLedsRgb.dst_color.dword = 0;
-    gLedsRgb.dst_color.r     = p_msg->dst_color.r;
-    gLedsRgb.dst_color.g     = p_msg->dst_color.g;
-    gLedsRgb.dst_color.b     = p_msg->dst_color.b;
+    gLedsRgb.dst_color.r     = p_msg->dst.color.r;
+    gLedsRgb.dst_color.g     = p_msg->dst.color.g;
+    gLedsRgb.dst_color.b     = p_msg->dst.color.b;
 
     /* Set the default tick interval to 30 ms */
     gLedsRgb.tick.interval = 3;
@@ -658,15 +658,15 @@ static void rgb_SetIndication_Sine(led_message_p p_msg)
 
     /* Determine the SRC color */
     gLedsRgb.src_color.dword = 0;
-    if (0 == p_msg->src_color.a)
+    if (0 == p_msg->src.color.a)
     {
         LED_Strip_RGB_GetAverageColor(&gLedsRgb.src_color);
     }
     else
     {
-        gLedsRgb.src_color.r = p_msg->src_color.r;
-        gLedsRgb.src_color.g = p_msg->src_color.g;
-        gLedsRgb.src_color.b = p_msg->src_color.b;
+        gLedsRgb.src_color.r = p_msg->src.color.r;
+        gLedsRgb.src_color.g = p_msg->src.color.g;
+        gLedsRgb.src_color.b = p_msg->src.color.b;
     }
 
     /* Calculate the timer parameters */
@@ -826,7 +826,7 @@ static void uwf_SetIndication_Brightness(leds_p p_leds, led_message_p p_msg)
     };
 
     p_leds->command = p_msg->command;
-    p_leds->dst     = p_msg->dst_color.a;
+    p_leds->dst     = p_msg->dst.brightness.v;
 
     /* Set the default tick interval to 30 ms */
     p_leds->tick.interval = 3;
@@ -834,11 +834,11 @@ static void uwf_SetIndication_Brightness(leds_p p_leds, led_message_p p_msg)
     p_leds->time.delta    = (p_leds->tick.interval * LED_TASK_TICK_MS);
 
     /* Determine the SRC brightness */
-    p_leds->src = p_msg->src_color.a;
-    //if (0 == p_msg->src_color.a)
-    //{
-    //    p_leds->src = p_leds->fp_get();
-    //}
+    p_leds->src = p_msg->src.brightness.v;
+    if (0 == p_msg->src.brightness.a)
+    {
+        p_leds->src = p_leds->fp_get();
+    }
 
     /* Calculate the timer parameters */
     if ((MIN_TRANSITION_TIME_MS < p_msg->interval) && (p_msg->duration < p_msg->interval))
@@ -913,7 +913,7 @@ static void uwf_SetIndication_Sine(leds_p p_leds, led_message_p p_msg)
     };
 
     p_leds->command = p_msg->command;
-    p_leds->dst     = p_msg->dst_color.a;
+    p_leds->dst     = p_msg->dst.brightness.v;
 
     /* Set the default tick interval to 30 ms */
     p_leds->tick.interval = 3;
@@ -921,16 +921,11 @@ static void uwf_SetIndication_Sine(leds_p p_leds, led_message_p p_msg)
     p_leds->time.delta    = (p_leds->tick.interval * LED_TASK_TICK_MS);
 
     /* Determine the SRC brightness */
-    p_leds->src = p_msg->src_color.a;
-    //p_leds->src = 0;
-    //if (0 == p_msg->src_color.a)
-    //{
-    //    p_leds->src = p_leds->fp_get();
-    //}
-    //else
-    //{
-    //    p_leds->src = p_msg->src_color.a;
-    //}
+    p_leds->src = p_msg->src.brightness.v;
+    if (0 == p_msg->src.brightness.a)
+    {
+        p_leds->src = p_leds->fp_get();
+    }
 
     /* Calculate the timer parameters */
     if ((MIN_TRANSITION_TIME_MS < p_msg->interval) && (p_msg->duration < p_msg->interval))
@@ -1117,11 +1112,11 @@ void LED_Task_DetermineColor(led_message_p p_msg, led_color_p p_color)
         switch (p_msg->command)
         {
             case LED_CMD_RGB_INDICATE_RAINBOW:
-                rgb_RainbowColorTransition(&p_msg->src_color, &p_msg->dst_color, percent, p_color);
+                rgb_RainbowColorTransition(&p_msg->src.color, &p_msg->dst.color, percent, p_color);
                 break;
             case LED_CMD_RGB_INDICATE_SINE:
                 percent = sin(percent * gPi);
-                rgb_SmoothColorTransition(&p_msg->src_color, &p_msg->dst_color, percent, p_color);
+                rgb_SmoothColorTransition(&p_msg->src.color, &p_msg->dst.color, percent, p_color);
                 break;
             case LED_CMD_UV_INDICATE_SINE:
                 /* No break */
@@ -1130,12 +1125,18 @@ void LED_Task_DetermineColor(led_message_p p_msg, led_color_p p_color)
             case LED_CMD_F_INDICATE_SINE:
                 percent = sin(percent * gPi);
                 p_color->a = uwf_SmoothBrightnessTransition
-                             (p_msg->src_color.a, p_msg->dst_color.a, percent);
+                             (p_msg->src.brightness.v, p_msg->dst.brightness.v, percent);
+                break;
+            case LED_CMD_UV_INDICATE_BRIGHTNESS:
+                /* No break */
+            case LED_CMD_W_INDICATE_BRIGHTNESS:
+                /* No break */
+            case LED_CMD_F_INDICATE_BRIGHTNESS:
+                p_color->a = uwf_SmoothBrightnessTransition
+                             (p_msg->src.brightness.v, p_msg->dst.brightness.v, percent);
                 break;
             default:
-                rgb_SmoothColorTransition(&p_msg->src_color, &p_msg->dst_color, percent, p_color);
-                p_color->a = uwf_SmoothBrightnessTransition
-                             (p_msg->src_color.a, p_msg->dst_color.a, percent);
+                rgb_SmoothColorTransition(&p_msg->src.color, &p_msg->dst.color, percent, p_color);
                 break;
         }
     }
@@ -1185,12 +1186,12 @@ static void rgb_Test_Color(void)
     memset(&led_msg, 0, sizeof(led_msg));
     led_msg.command         = LED_CMD_RGB_INDICATE_COLOR;
     /* To - Red */
-    led_msg.dst_color.r     = 255;
-    led_msg.dst_color.g     = 0;
-    led_msg.dst_color.b     = 0;
-    led_msg.dst_color.a     = 0;
+    led_msg.dst.color.r     = 255;
+    led_msg.dst.color.g     = 0;
+    led_msg.dst.color.b     = 0;
+    led_msg.dst.color.a     = 0;
     /* From - Ignored */
-    led_msg.src_color.dword = 0;
+    led_msg.src.color.dword = 0;
     led_msg.interval        = 0;
     led_msg.duration        = 0;
     LED_Task_SendMsg(&led_msg);
@@ -1200,15 +1201,15 @@ static void rgb_Test_Color(void)
     memset(&led_msg, 0, sizeof(led_msg));
     led_msg.command         = LED_CMD_RGB_INDICATE_COLOR;
     /* To - Green */
-    led_msg.dst_color.r     = 0;
-    led_msg.dst_color.g     = 255;
-    led_msg.dst_color.b     = 0;
-    led_msg.dst_color.a     = 1;
+    led_msg.dst.color.r     = 0;
+    led_msg.dst.color.g     = 255;
+    led_msg.dst.color.b     = 0;
+    led_msg.dst.color.a     = 1;
     /* From - Ignored */
-    led_msg.src_color.r     = 0;
-    led_msg.src_color.g     = 0;
-    led_msg.src_color.b     = 255;
-    led_msg.src_color.a     = 0;
+    led_msg.src.color.r     = 0;
+    led_msg.src.color.g     = 0;
+    led_msg.src.color.b     = 255;
+    led_msg.src.color.a     = 0;
     led_msg.interval        = 8000;
     led_msg.duration        = 0;
     LED_Task_SendMsg(&led_msg);
@@ -1218,15 +1219,15 @@ static void rgb_Test_Color(void)
     memset(&led_msg, 0, sizeof(led_msg));
     led_msg.command         = LED_CMD_RGB_INDICATE_COLOR;
     /* To - Red */
-    led_msg.dst_color.r     = 255;
-    led_msg.dst_color.g     = 0;
-    led_msg.dst_color.b     = 0;
-    led_msg.dst_color.a     = 1;
+    led_msg.dst.color.r     = 255;
+    led_msg.dst.color.g     = 0;
+    led_msg.dst.color.b     = 0;
+    led_msg.dst.color.a     = 1;
     /* From - Blue */
-    led_msg.src_color.r     = 0;
-    led_msg.src_color.g     = 0;
-    led_msg.src_color.b     = 255;
-    led_msg.src_color.a     = 1;
+    led_msg.src.color.r     = 0;
+    led_msg.src.color.g     = 0;
+    led_msg.src.color.b     = 255;
+    led_msg.src.color.a     = 1;
     led_msg.interval        = 8000;
     led_msg.duration        = 0;
     LED_Task_SendMsg(&led_msg);
@@ -1236,15 +1237,15 @@ static void rgb_Test_Color(void)
     memset(&led_msg, 0, sizeof(led_msg));
     led_msg.command         = LED_CMD_RGB_INDICATE_COLOR;
     /* To - Red */
-    led_msg.dst_color.r     = 255;
-    led_msg.dst_color.g     = 0;
-    led_msg.dst_color.b     = 0;
-    led_msg.dst_color.a     = 1;
+    led_msg.dst.color.r     = 255;
+    led_msg.dst.color.g     = 0;
+    led_msg.dst.color.b     = 0;
+    led_msg.dst.color.a     = 1;
     /* From - Blue with 50% */
-    led_msg.src_color.r     = 0;
-    led_msg.src_color.g     = 0;
-    led_msg.src_color.b     = 255;
-    led_msg.src_color.a     = 1;
+    led_msg.src.color.r     = 0;
+    led_msg.src.color.g     = 0;
+    led_msg.src.color.b     = 255;
+    led_msg.src.color.a     = 1;
     led_msg.interval        = 8000;
     led_msg.duration        = 4000;
     LED_Task_SendMsg(&led_msg);
@@ -1260,12 +1261,12 @@ static void rgb_Test_RgbCirculation(void)
     memset(&led_msg, 0, sizeof(led_msg));
     led_msg.command         = LED_CMD_RGB_INDICATE_RGB_CIRCULATION;
     /* To - Ignored */
-    led_msg.dst_color.r     = 0;
-    led_msg.dst_color.g     = 0;
-    led_msg.dst_color.b     = 0;
-    led_msg.dst_color.a     = 0;
+    led_msg.dst.color.r     = 0;
+    led_msg.dst.color.g     = 0;
+    led_msg.dst.color.b     = 0;
+    led_msg.dst.color.a     = 0;
     /* From - Ignored */
-    led_msg.src_color.dword = 0;
+    led_msg.src.color.dword = 0;
     led_msg.interval        = 0;
     led_msg.duration        = 0;
     LED_Task_SendMsg(&led_msg);
@@ -1281,12 +1282,12 @@ static void rgb_Test_Fade(void)
     memset(&led_msg, 0, sizeof(led_msg));
     led_msg.command         = LED_CMD_RGB_INDICATE_FADE;
     /* To - Some */
-    led_msg.dst_color.r     = 160;
-    led_msg.dst_color.g     = 0;
-    led_msg.dst_color.b     = 130;
-    led_msg.dst_color.a     = 0;
+    led_msg.dst.color.r     = 160;
+    led_msg.dst.color.g     = 0;
+    led_msg.dst.color.b     = 130;
+    led_msg.dst.color.a     = 0;
     /* From - Ignored */
-    led_msg.src_color.dword = 0;
+    led_msg.src.color.dword = 0;
     led_msg.interval        = 0;
     led_msg.duration        = 0;
     LED_Task_SendMsg(&led_msg);
@@ -1302,12 +1303,12 @@ static void rgb_Test_PingPong(void)
     memset(&led_msg, 0, sizeof(led_msg));
     led_msg.command         = LED_CMD_RGB_INDICATE_PINGPONG;
     /* To - Some */
-    led_msg.dst_color.r     = 160;
-    led_msg.dst_color.g     = 0;
-    led_msg.dst_color.b     = 130;
-    led_msg.dst_color.a     = 0;
+    led_msg.dst.color.r     = 160;
+    led_msg.dst.color.g     = 0;
+    led_msg.dst.color.b     = 130;
+    led_msg.dst.color.a     = 0;
     /* From - Ignored */
-    led_msg.src_color.dword = 0;
+    led_msg.src.color.dword = 0;
     led_msg.interval        = 0;
     led_msg.duration        = 0;
     LED_Task_SendMsg(&led_msg);
@@ -1324,12 +1325,12 @@ static void rgb_Test_RainbowCirculation(void)
     memset(&led_msg, 0, sizeof(led_msg));
     led_msg.command         = LED_CMD_RGB_INDICATE_RAINBOW_CIRCULATION;
     /* To - Some */
-    led_msg.dst_color.r     = 90;
-    led_msg.dst_color.g     = 90;
-    led_msg.dst_color.b     = 90;
-    led_msg.dst_color.a     = 0;
+    led_msg.dst.color.r     = 90;
+    led_msg.dst.color.g     = 90;
+    led_msg.dst.color.b     = 90;
+    led_msg.dst.color.a     = 0;
     /* From - Ignored */
-    led_msg.src_color.dword = 0;
+    led_msg.src.color.dword = 0;
     led_msg.interval        = 0;
     led_msg.duration        = 0;
     LED_Task_SendMsg(&led_msg);
@@ -1339,12 +1340,12 @@ static void rgb_Test_RainbowCirculation(void)
     memset(&led_msg, 0, sizeof(led_msg));
     led_msg.command         = LED_CMD_RGB_INDICATE_RAINBOW_CIRCULATION;
     /* To - Some */
-    led_msg.dst_color.r     = 0;
-    led_msg.dst_color.g     = 0;
-    led_msg.dst_color.b     = 0;
-    led_msg.dst_color.a     = 0;
+    led_msg.dst.color.r     = 0;
+    led_msg.dst.color.g     = 0;
+    led_msg.dst.color.b     = 0;
+    led_msg.dst.color.a     = 0;
     /* From - Ignored */
-    led_msg.src_color.dword = 0;
+    led_msg.src.color.dword = 0;
     led_msg.interval        = 0;
     led_msg.duration        = 0;
     LED_Task_SendMsg(&led_msg);
@@ -1361,15 +1362,15 @@ static void rgb_Test_Rainbow(void)
     memset(&led_msg, 0, sizeof(led_msg));
     led_msg.command         = LED_CMD_RGB_INDICATE_RAINBOW;
     /* To - Green */
-    led_msg.dst_color.r     = 0;
-    led_msg.dst_color.g     = 255;
-    led_msg.dst_color.b     = 0;
-    led_msg.dst_color.a     = 0;
+    led_msg.dst.color.r     = 0;
+    led_msg.dst.color.g     = 255;
+    led_msg.dst.color.b     = 0;
+    led_msg.dst.color.a     = 0;
     /* From - Ignored */
-    led_msg.src_color.r     = 0;
-    led_msg.src_color.g     = 0;
-    led_msg.src_color.b     = 0;
-    led_msg.src_color.a     = 0;
+    led_msg.src.color.r     = 0;
+    led_msg.src.color.g     = 0;
+    led_msg.src.color.b     = 0;
+    led_msg.src.color.a     = 0;
     led_msg.interval        = 15000;
     led_msg.duration        = 0;
     LED_Task_SendMsg(&led_msg);
@@ -1379,15 +1380,15 @@ static void rgb_Test_Rainbow(void)
     memset(&led_msg, 0, sizeof(led_msg));
     led_msg.command         = LED_CMD_RGB_INDICATE_RAINBOW;
     /* To - Red */
-    led_msg.dst_color.r     = 255;
-    led_msg.dst_color.g     = 0;
-    led_msg.dst_color.b     = 0;
-    led_msg.dst_color.a     = 0;
+    led_msg.dst.color.r     = 255;
+    led_msg.dst.color.g     = 0;
+    led_msg.dst.color.b     = 0;
+    led_msg.dst.color.a     = 0;
     /* From - Ignored */
-    led_msg.src_color.r     = 0;
-    led_msg.src_color.g     = 0;
-    led_msg.src_color.b     = 0;
-    led_msg.src_color.a     = 0;
+    led_msg.src.color.r     = 0;
+    led_msg.src.color.g     = 0;
+    led_msg.src.color.b     = 0;
+    led_msg.src.color.a     = 0;
     led_msg.interval        = 15000;
     led_msg.duration        = 0;
     LED_Task_SendMsg(&led_msg);
@@ -1397,15 +1398,15 @@ static void rgb_Test_Rainbow(void)
     memset(&led_msg, 0, sizeof(led_msg));
     led_msg.command         = LED_CMD_RGB_INDICATE_RAINBOW;
     /* To - Green */
-    led_msg.dst_color.r     = 0;
-    led_msg.dst_color.g     = 255;
-    led_msg.dst_color.b     = 0;
-    led_msg.dst_color.a     = 0;
+    led_msg.dst.color.r     = 0;
+    led_msg.dst.color.g     = 255;
+    led_msg.dst.color.b     = 0;
+    led_msg.dst.color.a     = 0;
     /* From - Ignored */
-    led_msg.src_color.r     = 0;
-    led_msg.src_color.g     = 0;
-    led_msg.src_color.b     = 0;
-    led_msg.src_color.a     = 0;
+    led_msg.src.color.r     = 0;
+    led_msg.src.color.g     = 0;
+    led_msg.src.color.b     = 0;
+    led_msg.src.color.a     = 0;
     led_msg.interval        = 15000;
     led_msg.duration        = 0;
     LED_Task_SendMsg(&led_msg);
@@ -1415,15 +1416,15 @@ static void rgb_Test_Rainbow(void)
     memset(&led_msg, 0, sizeof(led_msg));
     led_msg.command         = LED_CMD_RGB_INDICATE_RAINBOW;
     /* To - Red */
-    led_msg.dst_color.r     = 255;
-    led_msg.dst_color.g     = 0;
-    led_msg.dst_color.b     = 0;
-    led_msg.dst_color.a     = 0;
+    led_msg.dst.color.r     = 255;
+    led_msg.dst.color.g     = 0;
+    led_msg.dst.color.b     = 0;
+    led_msg.dst.color.a     = 0;
     /* From - Ignored */
-    led_msg.src_color.r     = 0;
-    led_msg.src_color.g     = 255;
-    led_msg.src_color.b     = 0;
-    led_msg.src_color.a     = 1;
+    led_msg.src.color.r     = 0;
+    led_msg.src.color.g     = 255;
+    led_msg.src.color.b     = 0;
+    led_msg.src.color.a     = 1;
     led_msg.interval        = 15000;
     led_msg.duration        = 0;
     LED_Task_SendMsg(&led_msg);
@@ -1433,15 +1434,15 @@ static void rgb_Test_Rainbow(void)
     memset(&led_msg, 0, sizeof(led_msg));
     led_msg.command         = LED_CMD_RGB_INDICATE_RAINBOW;
     /* To - Red */
-    led_msg.dst_color.r     = 255;
-    led_msg.dst_color.g     = 0;
-    led_msg.dst_color.b     = 0;
-    led_msg.dst_color.a     = 0;
+    led_msg.dst.color.r     = 255;
+    led_msg.dst.color.g     = 0;
+    led_msg.dst.color.b     = 0;
+    led_msg.dst.color.a     = 0;
     /* From - Ignored */
-    led_msg.src_color.r     = 0;
-    led_msg.src_color.g     = 255;
-    led_msg.src_color.b     = 0;
-    led_msg.src_color.a     = 1;
+    led_msg.src.color.r     = 0;
+    led_msg.src.color.g     = 255;
+    led_msg.src.color.b     = 0;
+    led_msg.src.color.a     = 1;
     led_msg.interval        = 15000;
     led_msg.duration        = 0;
     LED_Task_SendMsg(&led_msg);
@@ -1457,15 +1458,15 @@ static void rgb_Test_Sine(void)
     memset(&led_msg, 0, sizeof(led_msg));
     led_msg.command         = LED_CMD_RGB_INDICATE_SINE;
     /* To - Some */
-    led_msg.dst_color.r     = 0;
-    led_msg.dst_color.g     = 255;
-    led_msg.dst_color.b     = 0;
-    led_msg.dst_color.a     = 1;
+    led_msg.dst.color.r     = 0;
+    led_msg.dst.color.g     = 255;
+    led_msg.dst.color.b     = 0;
+    led_msg.dst.color.a     = 1;
     /* From - Ignored */
-    led_msg.src_color.r     = 255;
-    led_msg.src_color.g     = 0;
-    led_msg.src_color.b     = 0;
-    led_msg.src_color.a     = 1;
+    led_msg.src.color.r     = 255;
+    led_msg.src.color.g     = 0;
+    led_msg.src.color.b     = 0;
+    led_msg.src.color.a     = 1;
     led_msg.interval        = 6000;
     led_msg.duration        = 0;
     LED_Task_SendMsg(&led_msg);
@@ -1480,89 +1481,105 @@ static void uwf_Test_Brightness(void)
 
     /* Transition to DST UV brightness about 3000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command     = LED_CMD_UV_INDICATE_BRIGHTNESS;
-    led_msg.dst_color.a = 100;
-    led_msg.src_color.a = 0;
-    led_msg.interval    = 3000;
-    led_msg.duration    = 0;
+    led_msg.command          = LED_CMD_UV_INDICATE_BRIGHTNESS;
+    led_msg.dst.brightness.v = 100;
+    led_msg.dst.brightness.a = 1;
+    led_msg.src.brightness.v = 0;
+    led_msg.src.brightness.a = 1;
+    led_msg.interval         = 3000;
+    led_msg.duration         = 0;
     LED_Task_SendMsg(&led_msg);
     vTaskDelay(pdMS_TO_TICKS(4000));
 
     /* Transition to DST UV brightness about 8000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command     = LED_CMD_UV_INDICATE_BRIGHTNESS;
-    led_msg.dst_color.a = 0;
-    led_msg.src_color.a = 0;
-    led_msg.interval    = 8000;
-    led_msg.duration    = 0;
+    led_msg.command          = LED_CMD_UV_INDICATE_BRIGHTNESS;
+    led_msg.dst.brightness.v = 0;
+    led_msg.dst.brightness.a = 1;
+    led_msg.src.brightness.v = 0;
+    led_msg.src.brightness.a = 0;
+    led_msg.interval         = 8000;
+    led_msg.duration         = 0;
     LED_Task_SendMsg(&led_msg);
     vTaskDelay(pdMS_TO_TICKS(9000));
 
     /* Transition to DST W brightness about 3000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command     = LED_CMD_W_INDICATE_BRIGHTNESS;
-    led_msg.dst_color.a = 100;
-    led_msg.src_color.a = 0;
-    led_msg.interval    = 3000;
-    led_msg.duration    = 0;
+    led_msg.command          = LED_CMD_W_INDICATE_BRIGHTNESS;
+    led_msg.dst.brightness.v = 100;
+    led_msg.dst.brightness.a = 1;
+    led_msg.src.brightness.v = 0;
+    led_msg.src.brightness.a = 0;
+    led_msg.interval         = 3000;
+    led_msg.duration         = 0;
     LED_Task_SendMsg(&led_msg);
     vTaskDelay(pdMS_TO_TICKS(4000));
 
     /* Transition to DST W brightness about 8000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command     = LED_CMD_W_INDICATE_BRIGHTNESS;
-    led_msg.dst_color.a = 0;
-    led_msg.src_color.a = 0;
-    led_msg.interval    = 8000;
-    led_msg.duration    = 0;
+    led_msg.command          = LED_CMD_W_INDICATE_BRIGHTNESS;
+    led_msg.dst.brightness.v = 0;
+    led_msg.dst.brightness.a = 1;
+    led_msg.src.brightness.v = 0;
+    led_msg.src.brightness.a = 0;
+    led_msg.interval         = 8000;
+    led_msg.duration         = 0;
     LED_Task_SendMsg(&led_msg);
     vTaskDelay(pdMS_TO_TICKS(9000));
 
     /* Transition to DST F brightness about 3000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command     = LED_CMD_F_INDICATE_BRIGHTNESS;
-    led_msg.dst_color.a = 100;
-    led_msg.src_color.a = 0;
-    led_msg.interval    = 3000;
-    led_msg.duration    = 0;
+    led_msg.command          = LED_CMD_F_INDICATE_BRIGHTNESS;
+    led_msg.dst.brightness.v = 100;
+    led_msg.dst.brightness.a = 1;
+    led_msg.src.brightness.v = 0;
+    led_msg.src.brightness.a = 0;
+    led_msg.interval         = 3000;
+    led_msg.duration         = 0;
     LED_Task_SendMsg(&led_msg);
     vTaskDelay(pdMS_TO_TICKS(4000));
 
     /* Transition to DST F brightness about 8000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command     = LED_CMD_F_INDICATE_BRIGHTNESS;
-    led_msg.dst_color.a = 0;
-    led_msg.src_color.a = 0;
-    led_msg.interval    = 8000;
-    led_msg.duration    = 0;
+    led_msg.command          = LED_CMD_F_INDICATE_BRIGHTNESS;
+    led_msg.dst.brightness.v = 0;
+    led_msg.dst.brightness.a = 1;
+    led_msg.src.brightness.v = 0;
+    led_msg.src.brightness.a = 0;
+    led_msg.interval         = 8000;
+    led_msg.duration         = 0;
     LED_Task_SendMsg(&led_msg);
     vTaskDelay(pdMS_TO_TICKS(9000));
 
     /* Transition to DST UV/W/F brightness about 3000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.dst_color.a = 100;
-    led_msg.src_color.a = 0;
-    led_msg.interval    = 3000;
-    led_msg.duration    = 0;
-    led_msg.command     = LED_CMD_UV_INDICATE_BRIGHTNESS;
+    led_msg.dst.brightness.v = 100;
+    led_msg.dst.brightness.a = 1;
+    led_msg.src.brightness.v = 0;
+    led_msg.src.brightness.a = 0;
+    led_msg.interval         = 3000;
+    led_msg.duration         = 0;
+    led_msg.command          = LED_CMD_UV_INDICATE_BRIGHTNESS;
     LED_Task_SendMsg(&led_msg);
-    led_msg.command     = LED_CMD_W_INDICATE_BRIGHTNESS;
+    led_msg.command          = LED_CMD_W_INDICATE_BRIGHTNESS;
     LED_Task_SendMsg(&led_msg);
-    led_msg.command     = LED_CMD_F_INDICATE_BRIGHTNESS;
+    led_msg.command          = LED_CMD_F_INDICATE_BRIGHTNESS;
     LED_Task_SendMsg(&led_msg);
     vTaskDelay(pdMS_TO_TICKS(4000));
 
     /* Transition to DST UV/W/F brightness about 8000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.dst_color.a = 0;
-    led_msg.src_color.a = 0;
-    led_msg.interval    = 8000;
-    led_msg.duration    = 0;
-    led_msg.command     = LED_CMD_UV_INDICATE_BRIGHTNESS;
+    led_msg.dst.brightness.v = 0;
+    led_msg.dst.brightness.a = 1;
+    led_msg.src.brightness.v = 0;
+    led_msg.src.brightness.a = 0;
+    led_msg.interval         = 8000;
+    led_msg.duration         = 0;
+    led_msg.command          = LED_CMD_UV_INDICATE_BRIGHTNESS;
     LED_Task_SendMsg(&led_msg);
-    led_msg.command     = LED_CMD_W_INDICATE_BRIGHTNESS;
+    led_msg.command          = LED_CMD_W_INDICATE_BRIGHTNESS;
     LED_Task_SendMsg(&led_msg);
-    led_msg.command     = LED_CMD_F_INDICATE_BRIGHTNESS;
+    led_msg.command          = LED_CMD_F_INDICATE_BRIGHTNESS;
     LED_Task_SendMsg(&led_msg);
     vTaskDelay(pdMS_TO_TICKS(9000));
 }
@@ -1576,44 +1593,52 @@ static void uwf_Test_Sine(void)
     /* Transition to DST UV brightness about 5000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
     led_msg.command     = LED_CMD_UV_INDICATE_SINE;
-    led_msg.dst_color.a = 200;
-    led_msg.src_color.a = 0;
-    led_msg.interval    = 5000;
-    led_msg.duration    = 0;
+    led_msg.dst.brightness.v = 200;
+    led_msg.dst.brightness.a = 1;
+    led_msg.src.brightness.v = 0;
+    led_msg.src.brightness.a = 0;
+    led_msg.interval         = 5000;
+    led_msg.duration         = 0;
     LED_Task_SendMsg(&led_msg);
     vTaskDelay(pdMS_TO_TICKS(6000));
 
     /* Transition to DST W brightness about 5000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
     led_msg.command     = LED_CMD_W_INDICATE_SINE;
-    led_msg.dst_color.a = 100;
-    led_msg.src_color.a = 0;
-    led_msg.interval    = 5000;
-    led_msg.duration    = 0;
+    led_msg.dst.brightness.v = 100;
+    led_msg.dst.brightness.a = 1;
+    led_msg.src.brightness.v = 0;
+    led_msg.src.brightness.a = 0;
+    led_msg.interval         = 5000;
+    led_msg.duration         = 0;
     LED_Task_SendMsg(&led_msg);
     vTaskDelay(pdMS_TO_TICKS(6000));
 
     /* Transition to DST F brightness about 5000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.command     = LED_CMD_F_INDICATE_SINE;
-    led_msg.dst_color.a = 150;
-    led_msg.src_color.a = 0;
-    led_msg.interval    = 5000;
-    led_msg.duration    = 0;
+    led_msg.command          = LED_CMD_F_INDICATE_SINE;
+    led_msg.dst.brightness.v = 150;
+    led_msg.dst.brightness.a = 1;
+    led_msg.src.brightness.v = 0;
+    led_msg.src.brightness.a = 0;
+    led_msg.interval         = 5000;
+    led_msg.duration         = 0;
     LED_Task_SendMsg(&led_msg);
     vTaskDelay(pdMS_TO_TICKS(6000));
 
     /* Transition to DST UV/W/F brightness about 3000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
-    led_msg.dst_color.a = 100;
-    led_msg.src_color.a = 0;
-    led_msg.interval    = 3000;
-    led_msg.duration    = 0;
-    led_msg.command     = LED_CMD_UV_INDICATE_SINE;
+    led_msg.dst.brightness.v = 100;
+    led_msg.dst.brightness.a = 1;
+    led_msg.src.brightness.v = 0;
+    led_msg.src.brightness.a = 0;
+    led_msg.interval         = 3000;
+    led_msg.duration         = 0;
+    led_msg.command          = LED_CMD_UV_INDICATE_SINE;
     LED_Task_SendMsg(&led_msg);
-    led_msg.command     = LED_CMD_W_INDICATE_SINE;
+    led_msg.command          = LED_CMD_W_INDICATE_SINE;
     LED_Task_SendMsg(&led_msg);
-    led_msg.command     = LED_CMD_F_INDICATE_SINE;
+    led_msg.command          = LED_CMD_F_INDICATE_SINE;
     LED_Task_SendMsg(&led_msg);
     vTaskDelay(pdMS_TO_TICKS(4000));
 }

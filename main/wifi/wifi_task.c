@@ -304,8 +304,8 @@ static void wifi_Start(void)
     if (WIFI_BOOT_CONNECT_TO_AP == gWiFiBoot)
     {
         /* Indication - Blue Fade (wait for connection) */
-        led_msg.dst_color.r = 0;
-        led_msg.dst_color.b = 255;
+        led_msg.dst.color.r = 0;
+        led_msg.dst.color.b = 255;
         LED_Task_SendMsg(&led_msg);
 
         /* Create the default station */
@@ -331,8 +331,8 @@ static void wifi_Start(void)
     /* Access Point mode */
     {
         /* Indication - Red Fade (wait for connection) */
-        led_msg.dst_color.r = 255;
-        led_msg.dst_color.b = 0;
+        led_msg.dst.color.r = 255;
+        led_msg.dst.color.b = 0;
         LED_Task_SendMsg(&led_msg);
 
         /* Create the default access point */
@@ -442,8 +442,8 @@ static void wifi_WaitForDisconnect(void)
         (void)wifi_WaitFor(EVT_WIFI_ST_DISCONNECTED, portMAX_DELAY);
 
         /* Indication - Blue Fade (wait for connection) */
-        led_msg.dst_color.r = 0;
-        led_msg.dst_color.b = 255;
+        led_msg.dst.color.r = 0;
+        led_msg.dst.color.b = 255;
         LED_Task_SendMsg(&led_msg);
     }
     else
@@ -452,8 +452,8 @@ static void wifi_WaitForDisconnect(void)
         (void)wifi_WaitFor(EVT_WIFI_AP_ST_DISCONNECTED, portMAX_DELAY);
 
         /* Indication - Red Fade (wait for connection) */
-        led_msg.dst_color.r = 255;
-        led_msg.dst_color.b = 0;
+        led_msg.dst.color.r = 255;
+        led_msg.dst.color.b = 0;
         LED_Task_SendMsg(&led_msg);
     }
 }
@@ -737,7 +737,7 @@ void WiFi_Task_Init(void)
     /* Create the events group for WiFi task */
     gWiFiEvents = xEventGroupCreate();
 
-    (void)xTaskCreatePinnedToCore(vWiFi_Task, "WiFi", 6144, NULL, 5, NULL, CORE0);
+    (void)xTaskCreatePinnedToCore(vWiFi_Task, "WiFi", 8192, NULL, 5, NULL, CORE0);
 }
 
 //-------------------------------------------------------------------------------------------------
