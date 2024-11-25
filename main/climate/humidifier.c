@@ -274,12 +274,40 @@ typedef struct
     uint8_t none_b : 4;
 } bme280_status_t;
 
+enum
+{
+    SHT41_I2C_ADDRESS     = 0x88,
+    SHT41_I2C_SPEED_HZ    = 100000,
+    /* Specific values */
+    SHT41_MEASURE         = 0xFD,
+    SHT41_SOFT_RESET      = 0x94,
+    SHT41_HEAT_200MW_0P1S = 0x32,
+};
+
+typedef struct
+{
+    uint8_t temp_msb;
+    uint8_t temp_lsb;
+    uint8_t temp_crc;
+    uint8_t hum_msb;
+    uint8_t hum_lsb;
+    uint8_t hum_crc;
+} sht41_vm_measurement_t;
+
+typedef struct
+{
+    int16_t  temperature;
+    uint16_t humidity;
+} sht41_measurement_t;
+
 //-------------------------------------------------------------------------------------------------
 
 static i2c_device_p         gBme280             = NULL;
 static bme280_calibration_t gBme280Calibrartion = {0};
 static bme280_measurement_t gBme280Measurement  = {0};
 static bool                 gOn                 = false;
+static i2c_device_p         gSht41              = NULL;
+static sht41_measurement_t  gSht41Measurement   = {0};
 
 //-------------------------------------------------------------------------------------------------
 
@@ -662,6 +690,103 @@ static void bme280_StartMeasuring(void)
 
 //-------------------------------------------------------------------------------------------------
 
+static void sht41_Rd(uint8_t * p_buffer, uint8_t length)
+{
+    I2C_Rx(gSht41, p_buffer, length);
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void sht41_Wr(uint8_t value)
+{
+    uint8_t buffer[sizeof(value)] = {value};
+    I2C_Tx(gSht41, buffer, sizeof(buffer));
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void sht41_StartMeasuring(void)
+{
+    sht41_Wr(SHT41_MEASURE);
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void sht41_Heat(void)
+{
+    sht41_Wr(SHT41_HEAT_200MW_0P1S);
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void sht41_Readout(void)
+{
+    enum
+    {
+        HUMIDITY_MIN = 0,
+        HUMIDITY_MAX = 10000,
+    };
+    sht41_vm_measurement_t meas = {0};
+    int32_t                temp = 0;
+    int32_t                hum  = 0;
+
+    /* Burst read */
+    sht41_Rd((uint8_t *)&meas, sizeof(meas));
+
+    temp = (-4500 + 17500 * ((meas.temp_msb << 8) + meas.temp_lsb) / 65535);
+    hum  = (-600 + 12500 * ((meas.hum_msb << 8) + meas.hum_lsb) / 65535);
+    if (HUMIDITY_MIN > hum)
+    {
+        hum = HUMIDITY_MIN;
+    }
+    if (HUMIDITY_MAX < hum)
+    {
+        hum = HUMIDITY_MAX;
+    }
+
+    gSht41Measurement.temperature = temp;
+    gSht41Measurement.humidity    = hum;
+
+    HUMDFR_LOGI("T = %08X : %d", (int)temp, gSht41Measurement.temperature);
+    HUMDFR_LOGI("H = %08X : %d", (int)hum, gSht41Measurement.humidity);
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void sht41_Init(void)
+{
+    enum
+    {
+        WAITING_DELAY = 30,
+    };
+
+    if (NULL == gSht41)
+    {
+        i2c_device_config_t sht41_dvc_config =
+        {
+            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+            .device_address  = (SHT41_I2C_ADDRESS >> 1),
+            .scl_speed_hz    = SHT41_I2C_SPEED_HZ,
+            .scl_wait_us     = 0,
+        };
+
+        HUMDFR_LOGI("Init the SHT41 I2C");
+        I2C_Init();
+
+        gSht41 = I2C_AddDevice(&sht41_dvc_config);
+
+        sht41_StartMeasuring();
+
+        vTaskDelay(pdMS_TO_TICKS(WAITING_DELAY));
+
+        sht41_Readout();
+    }
+
+    HUMDFR_LOGI("Init of SHT41 is finished");
+}
+
+//-------------------------------------------------------------------------------------------------
+
 void Humidifier_Init(void)
 {
     enum
@@ -692,6 +817,9 @@ void Humidifier_Init(void)
     /* Initialize the BME280 */
     bme280_Init();
 
+    /* Initialize the SHT41 */
+    sht41_Init();
+
     /* Power off the humidifier */
     gpio_set_level(CONFIG_HUMIDIFIER_POWER_GPIO, 0);
 }
@@ -702,12 +830,16 @@ void Humidifier_PowerOn(void)
 {
     enum
     {
-        POWER_ON_DELAY = 1300,
+        POWER_ON_DELAY = 1100,
+        HEAT_DELAY     = 200,
     };
     /* Power on the humidifier */
     gpio_set_level(CONFIG_HUMIDIFIER_POWER_GPIO, 1);
     vTaskDelay(pdMS_TO_TICKS(POWER_ON_DELAY));
+    sht41_Heat();
+    vTaskDelay(pdMS_TO_TICKS(HEAT_DELAY));
     bme280_StartMeasuring();
+    sht41_StartMeasuring();
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -738,6 +870,7 @@ void Humidifier_OnOffButtonClick(void)
     gpio_set_level(CONFIG_HUMIDIFIER_BUTTON_GPIO, 0);
     vTaskDelay(pdMS_TO_TICKS(CLICK_DELAY));
     gOn = true;
+    sht41_Heat();
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -751,14 +884,27 @@ bool Humidifier_IsPoweredOn(void)
 
 void Humidifier_ReadSensors(void)
 {
+    enum
+    {
+        HUMIDITY_MAX = 10000,
+    };
     bme280_Readout();
+    sht41_Readout();
+    if (HUMIDITY_MAX == gSht41Measurement.humidity)
+    {
+        sht41_Heat();
+    }
+    else
+    {
+        sht41_StartMeasuring();
+    }
 }
 
 //-------------------------------------------------------------------------------------------------
 
 int16_t Humidifier_GetTemperature(void)
 {
-    return gBme280Measurement.temperature;
+    return ((gBme280Measurement.temperature + gSht41Measurement.temperature) / 2);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -772,7 +918,7 @@ uint32_t Humidifier_GetPressure(void)
 
 uint16_t Humidifier_GetHumidity(void)
 {
-    return gBme280Measurement.humidity;
+    return gSht41Measurement.humidity;
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -790,7 +936,7 @@ void Humidifier_Test(void)
     Humidifier_PowerOn();
     Humidifier_OnOffButtonClick();
     /* Humidify */
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    vTaskDelay(pdMS_TO_TICKS(3000));
     /* Off */
     Humidifier_PowerOff();
     vTaskDelay(pdMS_TO_TICKS(1000));
@@ -799,6 +945,7 @@ void Humidifier_Test(void)
     /* Measure */
     for (cnt = 0; cnt < COUNT; cnt++)
     {
+        HUMDFR_LOGI("---------------------------");
         Humidifier_ReadSensors();
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
