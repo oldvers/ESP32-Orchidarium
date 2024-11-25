@@ -421,11 +421,13 @@ static void ctrl_SetUltraViolet(ctrl_req_p p_req, ctrl_rsp_p p_rsp)
 
     led_message_t led_msg =
     {
-        .command     = LED_CMD_UV_INDICATE_BRIGHTNESS,
-        .src.color.a = 0,
-        .dst.color.a = p_req->value,
-        .interval    = 0,
-        .duration    = 0
+        .command          = LED_CMD_UV_INDICATE_BRIGHTNESS,
+        .src.brightness.v = 0,
+        .src.brightness.a = 0,
+        .dst.brightness.v = p_req->value,
+        .dst.brightness.a = 1,
+        .interval         = 0,
+        .duration         = 0
     };
     LED_Task_SendMsg(&led_msg);
 
@@ -447,11 +449,13 @@ static void ctrl_SetWhite(ctrl_req_p p_req, ctrl_rsp_p p_rsp)
 
     led_message_t led_msg =
     {
-        .command     = LED_CMD_W_INDICATE_BRIGHTNESS,
-        .src.color.a = 0,
-        .dst.color.a = p_req->value,
-        .interval    = 0,
-        .duration    = 0
+        .command          = LED_CMD_W_INDICATE_BRIGHTNESS,
+        .src.brightness.v = 0,
+        .src.brightness.a = 0,
+        .dst.brightness.v = p_req->value,
+        .dst.brightness.a = 1,
+        .interval         = 0,
+        .duration         = 0
     };
     LED_Task_SendMsg(&led_msg);
 
@@ -473,11 +477,13 @@ static void ctrl_SetFito(ctrl_req_p p_req, ctrl_rsp_p p_rsp)
 
     led_message_t led_msg =
     {
-        .command     = LED_CMD_F_INDICATE_BRIGHTNESS,
-        .src.color.a = 0,
-        .dst.color.a = p_req->value,
-        .interval    = 0,
-        .duration    = 0
+        .command          = LED_CMD_F_INDICATE_BRIGHTNESS,
+        .src.brightness.v = 0,
+        .src.brightness.a = 0,
+        .dst.brightness.v = p_req->value,
+        .dst.brightness.a = 1,
+        .interval         = 0,
+        .duration         = 0
     };
     LED_Task_SendMsg(&led_msg);
 
