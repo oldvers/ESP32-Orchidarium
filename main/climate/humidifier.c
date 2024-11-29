@@ -282,6 +282,7 @@ enum
     SHT41_MEASURE         = 0xFD,
     SHT41_SOFT_RESET      = 0x94,
     SHT41_HEAT_200MW_0P1S = 0x32,
+    SHT41_HEAT_110MW_0P1S = 0x24,
 };
 
 typedef struct
@@ -705,6 +706,13 @@ static void sht41_Wr(uint8_t value)
 
 //-------------------------------------------------------------------------------------------------
 
+static void sht41_SoftReset(void)
+{
+    sht41_Wr(SHT41_SOFT_RESET);
+}
+
+//-------------------------------------------------------------------------------------------------
+
 static void sht41_StartMeasuring(void)
 {
     sht41_Wr(SHT41_MEASURE);
@@ -714,7 +722,7 @@ static void sht41_StartMeasuring(void)
 
 static void sht41_Heat(void)
 {
-    sht41_Wr(SHT41_HEAT_200MW_0P1S);
+    sht41_Wr(SHT41_HEAT_110MW_0P1S);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -775,10 +783,12 @@ static void sht41_Init(void)
 
         gSht41 = I2C_AddDevice(&sht41_dvc_config);
 
+        HUMDFR_LOGI("SHT41 Start measuring");
         sht41_StartMeasuring();
 
         vTaskDelay(pdMS_TO_TICKS(WAITING_DELAY));
 
+        HUMDFR_LOGI("SHT41 Readout");
         sht41_Readout();
     }
 
@@ -830,16 +840,20 @@ void Humidifier_PowerOn(void)
 {
     enum
     {
-        POWER_ON_DELAY = 1100,
+        POWER_ON_DELAY = 900,
         HEAT_DELAY     = 200,
+        STARTUP_DELAY  = 200,
     };
     /* Power on the humidifier */
     gpio_set_level(CONFIG_HUMIDIFIER_POWER_GPIO, 1);
     vTaskDelay(pdMS_TO_TICKS(POWER_ON_DELAY));
+    sht41_SoftReset();
+    vTaskDelay(pdMS_TO_TICKS(STARTUP_DELAY));
     sht41_Heat();
     vTaskDelay(pdMS_TO_TICKS(HEAT_DELAY));
     bme280_StartMeasuring();
     sht41_StartMeasuring();
+    vTaskDelay(pdMS_TO_TICKS(STARTUP_DELAY));
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -862,15 +876,17 @@ void Humidifier_OnOffButtonClick(void)
 {
     enum
     {
-        CLICK_DELAY = 80,
+        HOLD_DELAY    = 80,
+        RELEASE_DELAY = 120,
     };
+    /* Heat the sensor before humidification */
+    sht41_Heat();
     /* Click the button */
     gpio_set_level(CONFIG_HUMIDIFIER_BUTTON_GPIO, 1);
-    vTaskDelay(pdMS_TO_TICKS(CLICK_DELAY));
+    vTaskDelay(pdMS_TO_TICKS(HOLD_DELAY));
     gpio_set_level(CONFIG_HUMIDIFIER_BUTTON_GPIO, 0);
-    vTaskDelay(pdMS_TO_TICKS(CLICK_DELAY));
+    vTaskDelay(pdMS_TO_TICKS(RELEASE_DELAY));
     gOn = true;
-    sht41_Heat();
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -927,12 +943,30 @@ void Humidifier_Test(void)
 {
     enum
     {
-        COUNT = 100,
+        COUNT_ON  = 10,
+        COUNT_OFF = 100,
     };
     uint8_t cnt = 0;
 
-    /* On */
+    HUMDFR_LOGI("Init the Humidifier");
     Humidifier_Init();
+
+    /* Test Sensors work during the Ultrasonic is on */
+    HUMDFR_LOGI("Power On");
+    Humidifier_PowerOn();
+    HUMDFR_LOGI("Humidification");
+    Humidifier_OnOffButtonClick();
+    HUMDFR_LOGI("Read sensors");
+    for (cnt = 0; cnt < COUNT_ON; cnt++)
+    {
+        HUMDFR_LOGI("---------------------------");
+        Humidifier_ReadSensors();
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+    HUMDFR_LOGI("Power off");
+    Humidifier_PowerOff();
+
+    /* On */
     Humidifier_PowerOn();
     Humidifier_OnOffButtonClick();
     /* Humidify */
@@ -943,7 +977,7 @@ void Humidifier_Test(void)
     /* On */
     Humidifier_PowerOn();
     /* Measure */
-    for (cnt = 0; cnt < COUNT; cnt++)
+    for (cnt = 0; cnt < COUNT_OFF; cnt++)
     {
         HUMDFR_LOGI("---------------------------");
         Humidifier_ReadSensors();

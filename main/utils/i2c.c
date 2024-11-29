@@ -12,6 +12,21 @@
 #define I2C_PORT_NUMBER  (-1)
 #define I2C_TIMEOUT      (-1)
 
+#define I2C_DEBUG  0
+
+#if (1 == I2C_DEBUG)
+#    define I2C_ERROR_CHECK(x) do                                       \
+                               {                                        \
+                                   esp_err_t r = (x);                   \
+                                   while (r != ESP_OK)                  \
+                                   {                                    \
+                                       vTaskDelay(pdMS_TO_TICKS(1000)); \
+                                   };                                   \
+                               } while (0)
+#else
+#    define I2C_ERROR_CHECK(x) ESP_ERROR_CHECK(x)
+#endif
+
 //-------------------------------------------------------------------------------------------------
 
 static i2c_bus_p gI2CBusHandle = NULL;
@@ -32,7 +47,7 @@ void I2C_Init(void)
             .flags.enable_internal_pullup = 1,
         };
 
-        ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_config, &gI2CBusHandle));
+        I2C_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_config, &gI2CBusHandle));
     }
 }
 
@@ -41,7 +56,7 @@ void I2C_Init(void)
 i2c_device_p I2C_AddDevice(i2c_device_config_t * p_config)
 {
     i2c_device_p result = NULL;
-    ESP_ERROR_CHECK(i2c_master_bus_add_device(gI2CBusHandle, p_config, &result));
+    I2C_ERROR_CHECK(i2c_master_bus_add_device(gI2CBusHandle, p_config, &result));
     return result;
 }
 
@@ -49,21 +64,21 @@ i2c_device_p I2C_AddDevice(i2c_device_config_t * p_config)
 
 void I2C_Tx(i2c_device_p p_dvc, uint8_t * p_tx, uint8_t tx_sz)
 {
-    ESP_ERROR_CHECK(i2c_master_transmit(p_dvc, p_tx, tx_sz, I2C_TIMEOUT));
+    I2C_ERROR_CHECK(i2c_master_transmit(p_dvc, p_tx, tx_sz, I2C_TIMEOUT));
 }
 
 //-------------------------------------------------------------------------------------------------
 
 void I2C_Rx(i2c_device_p p_dvc, uint8_t * p_rx, uint8_t rx_sz)
 {
-    ESP_ERROR_CHECK(i2c_master_receive(p_dvc, p_rx, rx_sz, I2C_TIMEOUT));
+    I2C_ERROR_CHECK(i2c_master_receive(p_dvc, p_rx, rx_sz, I2C_TIMEOUT));
 }
 
 //-------------------------------------------------------------------------------------------------
 
 void I2C_TxRx(i2c_device_p p_dvc, uint8_t * p_tx, uint8_t tx_sz, uint8_t * p_rx, uint8_t rx_sz)
 {
-    ESP_ERROR_CHECK(i2c_master_transmit_receive(p_dvc, p_tx, tx_sz, p_rx, rx_sz, I2C_TIMEOUT));
+    I2C_ERROR_CHECK(i2c_master_transmit_receive(p_dvc, p_tx, tx_sz, p_rx, rx_sz, I2C_TIMEOUT));
 }
 
 //-------------------------------------------------------------------------------------------------
