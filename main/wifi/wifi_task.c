@@ -96,6 +96,12 @@ static unsigned int RTC_NOINIT_ATTR gWiFiBoot;
 static EventBits_t wifi_WaitFor(EventBits_t events, TickType_t timeout)
 {
     EventBits_t bits = 0;
+    TickType_t  tmot = portMAX_DELAY;
+
+    if (portMAX_DELAY != timeout)
+    {
+        tmot = pdMS_TO_TICKS(timeout);
+    }
 
     /* Waiting until either specified event is set */
     bits = xEventGroupWaitBits
@@ -104,7 +110,7 @@ static EventBits_t wifi_WaitFor(EventBits_t events, TickType_t timeout)
                events,       /* Bits To Wait For */
                pdTRUE,       /* Clear On Exit */
                pdFALSE,      /* Wait For All Bits */
-               pdMS_TO_TICKS(timeout)
+               tmot
            );
 
     return bits;

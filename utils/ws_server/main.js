@@ -233,27 +233,32 @@ wss.on("connection", ws =>
     {
         console.log("Rx: Get Day Measurements");
 
-        let len = (2 + 24 * 4 + 24 * 2 + 24 * 2);
+        let count = 73;
+        let len = (2 + count * (4 + 2 + 2));
         let buffer = new ArrayBuffer(len);
         let view = new DataView(buffer);
         let offs = 0;
         let i = 0;
+        let value = 0;
 
         view.setUint8(offs++, wsProtocol.getDayMeasurements); /* Command */
         view.setUint8(offs++, wsProtocol.success); /* Status */
-        for (i = 0; i < 24; i++)  /* Pressure */
+        for (i = 0; i < count; i++)  /* Pressure */
         {
-            view.setUint32(offs, (90000 + Math.random() * 20000), true);
+            value = (96000 + (i * 8000 / count) + Math.random() * 1000);
+            view.setUint32(offs, value, true);
             offs += 4;
         }
-        for (i = 0; i < 24; i++) /* Temperature */
+        for (i = 0; i < count; i++) /* Temperature */
         {
-            view.setInt16(offs, (Math.random() * 3500), true);
+            value = (2100 + (i * 900 / count) + Math.random() * 150);
+            view.setInt16(offs, value, true);
             offs += 2;
         }
-        for (i = 0; i < 24; i++) /* Humidity */
+        for (i = 0; i < count; i++) /* Humidity */
         {
-            view.setUint16(offs, (Math.random() * 9500), true);
+            value = (5100 + (i * 2100 / count) + Math.random() * 250);
+            view.setUint16(offs, value, true);
             offs += 2;
         }
 

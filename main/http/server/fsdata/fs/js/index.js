@@ -14,7 +14,7 @@ window.onload = onWindowLoad;
 function createCharts()
 {
     let grid = {fillStyle: '#ffffff', strokeStyle: '#d4d4d4', verticalSections: 4, millisPerLine: 1000, lineWidth: 1};
-    let labels = {fillStyle: '#000000', fontSize: 11, precision: 3};
+    let labels = {fillStyle: '#000000', fontSize: 11, precision: 0};
     let tooltip = {strokeStyle: '#bbbbbb'};
     let interval = 0;
     let canvas = undefined;
@@ -37,7 +37,7 @@ function createCharts()
     
     canvas = document.getElementById("chart-t");
     chart_t.addTimeSeries(series_t, {lineWidth: 2, strokeStyle: '#cc8b00', fillStyle: 'rgba(204,139,0,0.18)'});
-    chart_t.streamTo(canvas, 0);
+    chart_t.streamTo(canvas, interval);
     canvas = document.getElementById("chart-h");
     chart_h.addTimeSeries(series_h, {lineWidth: 2, strokeStyle: '#7542ff', fillStyle: 'rgba(117,66,255,0.18)'});
     chart_h.streamTo(canvas, interval);
@@ -194,7 +194,7 @@ function onDayMeasurementsReceived(ts, hs, ps)
     console.log("Day Measurements: " + ts.length);
 
     let canvas = document.getElementById("chart-t");
-    let milisPerPixel = (23000 * window.devicePixelRatio / canvas.width);
+    let milisPerPixel = (24000 * window.devicePixelRatio / canvas.width);
 
     chart_t.options.millisPerPixel = milisPerPixel;
     chart_h.options.millisPerPixel = milisPerPixel;
@@ -203,17 +203,17 @@ function onDayMeasurementsReceived(ts, hs, ps)
     series_t.clear();
     for (i = 0; i < ts.length; i++)
     {
-        series_t.append(i * 1000.0, ts[i]);
+        series_t.append(i * 1000.0 / 3, ts[i]);
     }
     series_h.clear();
     for (i = 0; i < hs.length; i++)
     {
-        series_h.append(i * 1000.0, hs[i]);
+        series_h.append(i * 1000.0 / 3, hs[i]);
     }
     series_p.clear();
     for (i = 0; i < ps.length; i++)
     {
-        series_p.append(i * 1000.0, ps[i]);
+        series_p.append(i * 1000.0 / 3, ps[i]);
     }
 }
 

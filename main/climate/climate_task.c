@@ -61,9 +61,9 @@ typedef struct
 
 typedef struct
 {
-    time_t ten_sec;
-    time_t one_min;
-    time_t one_hour;
+    time_t shrt_term;
+    time_t midl_term;
+    time_t long_term;
 } alarms_t, * alarms_p;
 
 typedef struct
@@ -84,8 +84,8 @@ typedef struct
 typedef struct
 {
     alarms_t       alarms;
-    accumulator_t  acc_one_min;
-    accumulator_t  acc_one_hour;
+    accumulator_t  acc_midl;
+    accumulator_t  acc_long;
     measurements_p meas;
     struct
     {
@@ -207,7 +207,7 @@ static void clt_ProcessHumidifier(void)
 
 //-------------------------------------------------------------------------------------------------
 
-static void clt_SetSensorsTenSecondsAlarm(time_t * p_now, time_t * p_alarm)
+static void clt_SetSensorsShortTermAlarm(time_t * p_now, time_t * p_alarm)
 {
     struct tm dt = {0};
 
@@ -219,7 +219,7 @@ static void clt_SetSensorsTenSecondsAlarm(time_t * p_now, time_t * p_alarm)
 
 //-------------------------------------------------------------------------------------------------
 
-static void clt_SetSensorsOneMinuteAlarm(time_t * p_now, time_t * p_alarm)
+static void clt_SetSensorsMiddleTermAlarm(time_t * p_now, time_t * p_alarm)
 {
     struct tm dt = {0};
 
@@ -231,14 +231,14 @@ static void clt_SetSensorsOneMinuteAlarm(time_t * p_now, time_t * p_alarm)
 
 //-------------------------------------------------------------------------------------------------
 
-static void clt_SetSensorsOneHourAlarm(time_t * p_now, time_t * p_alarm)
+static void clt_SetSensorsLongTermAlarm(time_t * p_now, time_t * p_alarm)
 {
     struct tm dt = {0};
 
-    /* Set the alarm for the next 1 hour */
-    *p_alarm = (*p_now + 3600);
+    /* Set the alarm for the next 20 minutes */
+    *p_alarm = (*p_now + 20 * 60);
     localtime_r(p_alarm, &dt);
-    *p_alarm -= (dt.tm_min * 60 + dt.tm_sec);
+    *p_alarm -= ((dt.tm_min % 20) * 60 + dt.tm_sec);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -249,61 +249,61 @@ static void clt_SetSensorsAlarms(void)
 
     time(&now);
 
-    clt_SetSensorsTenSecondsAlarm(&now, &gSensors.alarms.ten_sec);
-    clt_SetSensorsOneMinuteAlarm(&now, &gSensors.alarms.one_min);
-    clt_SetSensorsOneHourAlarm(&now, &gSensors.alarms.one_hour);
+    clt_SetSensorsShortTermAlarm(&now, &gSensors.alarms.shrt_term);
+    clt_SetSensorsMiddleTermAlarm(&now, &gSensors.alarms.midl_term);
+    clt_SetSensorsLongTermAlarm(&now, &gSensors.alarms.long_term);
 }
 
 //-------------------------------------------------------------------------------------------------
 
-static void clt_SensorsAcummulateMinute(void)
+static void clt_SensorsAcummulateMiddleTerm(void)
 {
-    gSensors.acc_one_min.pressure    += Humidifier_GetPressure();
-    gSensors.acc_one_min.temperature += Humidifier_GetTemperature();
-    gSensors.acc_one_min.humidity    += Humidifier_GetHumidity();
-    gSensors.acc_one_min.count++;
+    gSensors.acc_midl.pressure    += Humidifier_GetPressure();
+    gSensors.acc_midl.temperature += Humidifier_GetTemperature();
+    gSensors.acc_midl.humidity    += Humidifier_GetHumidity();
+    gSensors.acc_midl.count++;
 }
 
 //-------------------------------------------------------------------------------------------------
 
-static void clt_SensorsUpdateMinuteMeasurements(void)
+static void clt_SensorsUpdateMiddleTermMeasurements(void)
 {
     gSensors.meas->minute.pressure =
     (
-        gSensors.acc_one_min.pressure / gSensors.acc_one_min.count / 1000
+        gSensors.acc_midl.pressure / gSensors.acc_midl.count / 1000
     );
     gSensors.meas->minute.temperature =
     (
-        gSensors.acc_one_min.temperature / gSensors.acc_one_min.count
+        gSensors.acc_midl.temperature / gSensors.acc_midl.count
     );
     gSensors.meas->minute.humidity =
     (
-        gSensors.acc_one_min.humidity / gSensors.acc_one_min.count
+        gSensors.acc_midl.humidity / gSensors.acc_midl.count
     );
 
     CLT_LOGI
     (
         "Minute - T: %4u - H: %4u - P: %6lu",
-        gSensors.meas->min.temperature,
-        gSensors.meas->min.humidity,
-        gSensors.meas->min.pressure
+        gSensors.meas->minute.temperature,
+        gSensors.meas->minute.humidity,
+        gSensors.meas->minute.pressure
     );
 }
 
 //-------------------------------------------------------------------------------------------------
 
-void clt_SensorsAcummulateHour(void)
+void clt_SensorsAcummulateLongTerm(void)
 {
-    gSensors.acc_one_hour.pressure    += gSensors.acc_one_min.pressure;
-    gSensors.acc_one_hour.temperature += gSensors.acc_one_min.temperature;
-    gSensors.acc_one_hour.humidity    += gSensors.acc_one_min.humidity;
-    gSensors.acc_one_hour.count       += gSensors.acc_one_min.count;
-    memset(&gSensors.acc_one_min, 0, sizeof(gSensors.acc_one_min));
+    gSensors.acc_long.pressure    += gSensors.acc_midl.pressure;
+    gSensors.acc_long.temperature += gSensors.acc_midl.temperature;
+    gSensors.acc_long.humidity    += gSensors.acc_midl.humidity;
+    gSensors.acc_long.count       += gSensors.acc_midl.count;
+    memset(&gSensors.acc_midl, 0, sizeof(gSensors.acc_midl));
 }
 
 //-------------------------------------------------------------------------------------------------
 
-void clt_SensorsUpdateHourMeasurements(void)
+void clt_SensorsUpdateLongTermMeasurements(void)
 {
     uint8_t idx = (CLIMATE_DAY_MEASUREMENTS_COUNT - 1);
     void *  p_dst = NULL;
@@ -318,7 +318,7 @@ void clt_SensorsUpdateHourMeasurements(void)
     /* Store to the last item in array */
     gSensors.meas->day.pressure[idx] =
     (
-        gSensors.acc_one_hour.pressure / gSensors.acc_one_hour.count / 1000
+        gSensors.acc_long.pressure / gSensors.acc_long.count / 1000
     );
 
     /* Free the space for the latest element */
@@ -329,7 +329,7 @@ void clt_SensorsUpdateHourMeasurements(void)
     /* Store to the last item in array */
     gSensors.meas->day.temperature[idx] =
     (
-        gSensors.acc_one_hour.temperature / gSensors.acc_one_hour.count
+        gSensors.acc_long.temperature / gSensors.acc_long.count
     );
 
     /* Free the space for the latest element */
@@ -340,16 +340,16 @@ void clt_SensorsUpdateHourMeasurements(void)
     /* Store to the last item in array */
     gSensors.meas->day.humidity[idx] =
     (
-        gSensors.acc_one_hour.humidity / gSensors.acc_one_hour.count
+        gSensors.acc_long.humidity / gSensors.acc_long.count
     );
 
-    memset(&gSensors.acc_one_hour, 0, sizeof(gSensors.acc_one_hour));
+    memset(&gSensors.acc_long, 0, sizeof(gSensors.acc_long));
 
     gSensors.meas_updated = true;
 
     CLT_LOGI
     (
-        "Hour - T: %4u - H: %4u - P: %6lu",
+        "20 Minutes - T: %4u - H: %4u - P: %6lu",
         gSensors.meas->day.temperature[idx],
         gSensors.meas->day.humidity[idx],
         gSensors.meas->day.pressure[idx]
@@ -374,35 +374,35 @@ static void clt_ProcessSensors(void)
     localtime_r(&now, &datetime);
     strftime(string, sizeof(string), "%c", &datetime);
 
-    if (now >= gSensors.alarms.ten_sec)
+    if (now >= gSensors.alarms.shrt_term)
     {
         CLT_LOGI("Alarm 10 S! - %s", string);
-        clt_SetSensorsTenSecondsAlarm(&now, &gSensors.alarms.ten_sec);
+        clt_SetSensorsShortTermAlarm(&now, &gSensors.alarms.shrt_term);
 
         /* Read sensors' values */
         Humidifier_ReadSensors();
 
-        /* Accumulate the minute values */
-        clt_SensorsAcummulateMinute();
+        /* Accumulate the middle term values */
+        clt_SensorsAcummulateMiddleTerm();
 
-        if (now >= gSensors.alarms.one_min)
+        if (now >= gSensors.alarms.midl_term)
         {
             CLT_LOGI("Alarm 1 MM! - %s", string);
-            clt_SetSensorsOneMinuteAlarm(&now, &gSensors.alarms.one_min);
+            clt_SetSensorsMiddleTermAlarm(&now, &gSensors.alarms.midl_term);
 
-            /* Update the minute measurements */
-            clt_SensorsUpdateMinuteMeasurements();
+            /* Update the middle term measurements */
+            clt_SensorsUpdateMiddleTermMeasurements();
 
-            /* Accumulate the hour values */
-            clt_SensorsAcummulateHour();
+            /* Accumulate the long term values */
+            clt_SensorsAcummulateLongTerm();
 
-            if (now >= gSensors.alarms.one_hour)
+            if (now >= gSensors.alarms.long_term)
             {
-                CLT_LOGI("Alarm 1 HH! - %s", string);
-                clt_SetSensorsOneHourAlarm(&now, &gSensors.alarms.one_hour);
+                CLT_LOGI("Alarm 20 M! - %s", string);
+                clt_SetSensorsLongTermAlarm(&now, &gSensors.alarms.long_term);
 
-                /* Update the hour measurements */
-                clt_SensorsUpdateHourMeasurements();
+                /* Update the long term measurements */
+                clt_SensorsUpdateLongTermMeasurements();
             }
         }
     }
@@ -444,6 +444,7 @@ void clt_Sensors_Init(void)
     /* Initialize the measurements if needed */
     if (CLIMATE_TASK_KEY != gMeasurements.key)
     {
+        CLT_LOGE("Day Measurements were lost!");
         memset(&gMeasurements, 0, sizeof(gMeasurements));
         gMeasurements.key = CLIMATE_TASK_KEY;
     }

@@ -190,19 +190,20 @@
         let ps = [];
         let offs = 2;
         let i = 0;
+        let cnt = 73;
 
-        for (i = 0; i < 24; i++)
+        for (i = 0; i < cnt; i++)
         {
             p = (view.getUint32(offs, true) * 0.001);
             ps[i] = p.toFixed(1);
             offs += 4;
         }
-        for (i = 0; i < 24; i++)
+        for (i = 0; i < cnt; i++)
         {
             ts[i] = (view.getInt16(offs, true) * 0.01).toFixed(2);
             offs += 2;
         }
-        for (i = 0; i < 24; i++)
+        for (i = 0; i < cnt; i++)
         {
             h = (view.getUint16(offs, true) * 0.01);
             hs[i] = h.toFixed(2);

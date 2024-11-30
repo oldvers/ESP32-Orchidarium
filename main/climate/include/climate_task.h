@@ -6,7 +6,7 @@
 
 enum
 {
-    CLIMATE_DAY_MEASUREMENTS_COUNT = 24,
+    CLIMATE_DAY_MEASUREMENTS_COUNT = 73,
 };
 
 typedef enum
