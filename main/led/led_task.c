@@ -1641,6 +1641,18 @@ static void uwf_Test_Sine(void)
     led_msg.command          = LED_CMD_F_INDICATE_SINE;
     LED_Task_SendMsg(&led_msg);
     vTaskDelay(pdMS_TO_TICKS(4000));
+
+    /* Transition to DST W brightness about 5000 ms */
+    memset(&led_msg, 0, sizeof(led_msg));
+    led_msg.command     = LED_CMD_W_INDICATE_SINE;
+    led_msg.dst.brightness.v = 100;
+    led_msg.dst.brightness.a = 1;
+    led_msg.src.brightness.v = 0;
+    led_msg.src.brightness.a = 1;
+    led_msg.interval         = 10000;
+    led_msg.duration         = 5000;
+    LED_Task_SendMsg(&led_msg);
+    vTaskDelay(pdMS_TO_TICKS(6000));
 }
 
 //-------------------------------------------------------------------------------------------------

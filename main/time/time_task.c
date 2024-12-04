@@ -28,10 +28,12 @@ static const char * gTAG = "TIME";
 #    define TIME_LOGI(...)  ESP_LOGI(gTAG, __VA_ARGS__)
 #    define TIME_LOGE(...)  ESP_LOGE(gTAG, __VA_ARGS__)
 #    define TIME_LOGW(...)  ESP_LOGV(gTAG, __VA_ARGS__)
+#    define TIME_LOGT(t,s)  time_LogTime(t, s)
 #else
 #    define TIME_LOGI(...)
 #    define TIME_LOGE(...)
 #    define TIME_LOGW(...)
+#    define TIME_LOGT(...)
 #endif
 
 //-------------------------------------------------------------------------------------------------
@@ -150,6 +152,22 @@ static const double gLon = 24.029716;
 static QueueHandle_t  gTimeQueue = {0};
 static time_command_t gCommand   = TIME_CMD_EMPTY;
 static time_t         gAlarm     = LONG_MAX;
+
+#if (1 == TIME_LOG)
+static const char * const gcPointDescription[] =
+{
+    [TIME_IDX_MIDNIGHT]            = "Day Start",
+    [TIME_IDX_MORNING_BLUE_HOUR]   = "Morning Blue Hour",
+    [TIME_IDX_MORNING_GOLDEN_HOUR] = "Morning Golden Hour",
+    [TIME_IDX_RISE]                = "Sun Rise",
+    [TIME_IDX_DAY]                 = "Day",
+    [TIME_IDX_NOON]                = "Noon",
+    [TIME_IDX_EVENING_GOLDEN_HOUR] = "Evening Golden Hour",
+    [TIME_IDX_SET]                 = "Sun Set",
+    [TIME_IDX_EVENING_BLUE_HOUR]   = "Evening Blue Hour",
+    [TIME_IDX_NIGHT]               = "Night",
+};
+#endif
 
 /* Start             -    0 minutes */
 /* MorningBlueHour   -  429 minutes */
@@ -467,11 +485,55 @@ static time_t time_SunNight(time_t time)
 
 //-------------------------------------------------------------------------------------------------
 
-static void time_TimePointsCalculate(time_t start_t, time_t ref_t, struct tm * p_dt, char * p_str)
+static void time_GetTimeRefs(time_t t, time_t * p_start_t, time_t * p_ref_t)
 {
-    int point = 0;
+    char      string[TIME_STR_MAX_LEN] = {0};
+    struct tm dt                       = {0};
+    struct tm tz                       = {0};
+    time_t    zero_time                = 0;
+    time_t    tz_offset                = 0;
 
-    TIME_LOGI("Calculation of Time points : -----------");
+    /* Determine the local time */
+    localtime_r(&t, &dt);
+    strftime(string, sizeof(string), "%c", &dt);
+    TIME_LOGI("%-26s : %10llu : %s", "Current local time", t, string);
+    TIME_LOGI("DST (Daylight Saving Time) : %10d", dt.tm_isdst);
+
+    /* Determine the time zone offset */
+    gmtime_r(&zero_time, &tz);
+    tz.tm_isdst  = dt.tm_isdst;
+    tz_offset = mktime(&tz);
+    TIME_LOGI("%-26s : %10lld", "Time zone offset", tz_offset);
+
+    /* Determine the reference UTC time for calculations */
+    dt.tm_sec  = 0;
+    dt.tm_min  = 1;
+    dt.tm_hour = 12;
+    *p_ref_t   = (mktime(&dt) - tz_offset);
+    gmtime_r(p_ref_t, &dt);
+    strftime(string, sizeof(string), "%c", &dt);
+    TIME_LOGI("%-26s : %10llu : %s", "Calculated reference UTC", *p_ref_t, string);
+
+    /* Determine the start of day time */
+    localtime_r(&t, &dt);
+    dt.tm_sec      = 0;
+    dt.tm_min      = 0;
+    dt.tm_hour     = 0;
+    *p_start_t = mktime(&dt);
+    strftime(string, sizeof(string), "%c", &dt);
+    TIME_LOGI("%-26s : %10llu : %s", "Start of day time", *p_start_t, string);
+}
+
+//-------------------------------------------------------------------------------------------------
+
+static void time_TimePointsCalculate(time_t start_t, time_t ref_t)
+{
+    char      string[TIME_STR_MAX_LEN] = {0};
+    struct tm dt                       = {0};
+    int       point                    = 0;
+
+    TIME_LOGI("Calculation of Time points : -------------------------");
+    TIME_LOGI("-------------------------- : Start      : Itrvl : Date");
     for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
     {
         if (TIME_IDX_NIGHT == point)
@@ -516,15 +578,16 @@ static void time_TimePointsCalculate(time_t start_t, time_t ref_t, struct tm * p
             gTimePoints[point].interval -= gTimePoints[point].start;
         }
 
-        localtime_r(&gTimePoints[point].start, p_dt);
-        strftime(p_str, TIME_STR_MAX_LEN, "%c", p_dt);
+        localtime_r(&gTimePoints[point].start, &dt);
+        strftime(string, sizeof(string), "%c", &dt);
         TIME_LOGI
         (
-            "[%d] - Interval: %5lu s    : %12llu - %s",
+            "[%d] %-23s: %10llu : %5lu : %s",
             point,
-            gTimePoints[point].interval,
+            gcPointDescription[point],
             gTimePoints[point].start,
-            p_str
+            gTimePoints[point].interval,
+            string
         );
     }
 }
@@ -536,7 +599,8 @@ static void time_RgbPointsCalculate(void)
     uint32_t interval = 0;
     int      point    = 0;
 
-    TIME_LOGI("Calculation of RGB points  : -----------");
+    TIME_LOGI("Calculation of RGB points  : ------------");
+    TIME_LOGI("-------------------------- : - Interval");
     interval = 0;
     for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
     {
@@ -545,7 +609,13 @@ static void time_RgbPointsCalculate(void)
         {
             gRgbPoints[point].interval = interval;
             interval = 0;
-            TIME_LOGI("[%d] - Interval: %5lu s", point, gRgbPoints[point].interval);
+            TIME_LOGI
+            (
+                "[%d] %-23s: %10lu",
+                point,
+                gcPointDescription[point],
+                gRgbPoints[point].interval
+            );
         }
     }
 }
@@ -558,7 +628,8 @@ static void time_UwPointsCalculate(void)
     int      point    = 0;
     int32_t  value    = 0;
 
-    TIME_LOGI("Calculation of UV/W points : -----------");
+    TIME_LOGI("Calculation of UV/W points : ----------------------");
+    TIME_LOGI("-------------------------- : - Interval :  UV :   W");
     interval = 0;
     for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
     {
@@ -590,16 +661,11 @@ static void time_UwPointsCalculate(void)
                 gUwPoints[point].transition->w_max = value;
             }
 
-            if ((0 == gUwPoints[point].transition->u_max) &&
-                (0 == gUwPoints[point].transition->w_max))
-            {
-                gUwPoints[point].interval = 0;
-            }
-
             TIME_LOGI
             (
-                "[%d] - Interval: %5lu s - UV: %3d - W: %3d",
+                "[%d] %-23s: %10lu : %3d : %3d",
                 point,
+                gcPointDescription[point],
                 gUwPoints[point].interval,
                 gUwPoints[point].transition->u_max,
                 gUwPoints[point].transition->w_max
@@ -616,7 +682,8 @@ static void time_FanPointsCalculate(void)
     int      point    = 0;
     uint32_t value    = 0;
 
-    TIME_LOGI("Calculation of FAN points  : -----------");
+    TIME_LOGI("Calculation of FAN points  : ----------------------");
+    TIME_LOGI("-------------------------- : - Interval :   S :   %%");
 
     /* Set/calculate the FAN in time percents */
     gFanMorning.percent = TIME_FAN_MORNING_PERCENT;
@@ -628,7 +695,6 @@ static void time_FanPointsCalculate(void)
     value /= (TIME_LONGEST_DAY_DURATION_S - TIME_SHORTEST_DAY_DURATION_S);
     value += TIME_FAN_DAY_PERCENT_MIN;
     gFanDay.percent = value;
-    TIME_LOGI("FAN Day Percent: %3lu %%", value);
 
     for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
     {
@@ -637,7 +703,15 @@ static void time_FanPointsCalculate(void)
         {
             gFanPoints[point].interval = interval;
             interval = 0;
-            TIME_LOGI("[%d] - Interval: %5lu s", point, gFanPoints[point].interval);
+            TIME_LOGI
+            (
+                "[%d] %-23s: %10lu : %3d : %3d",
+                point,
+                gcPointDescription[point],
+                gFanPoints[point].interval,
+                gFanPoints[point].transition->speed,
+                gFanPoints[point].transition->percent
+            );
         }
     }
 }
@@ -650,7 +724,8 @@ static void time_HumidifierPointsCalculate(void)
     int      point    = 0;
     uint32_t value    = 0;
 
-    TIME_LOGI("Calculation of HUM points  : -----------");
+    TIME_LOGI("Calculation of HUM points  : ----------------------");
+    TIME_LOGI("-------------------------- : - Interval :  On : Dur");
 
     /* Calculate the Humidification duration */
     value  = gTimePoints[TIME_IDX_EVENING_GOLDEN_HOUR].start;
@@ -660,7 +735,6 @@ static void time_HumidifierPointsCalculate(void)
     value /= (TIME_LONGEST_DAY_DURATION_S - TIME_SHORTEST_DAY_DURATION_S);
     value += TIME_HUMIDIFIER_MIN_DURATION_S;
     gHumidifierOn.duration = value;
-    TIME_LOGI("Humidifier Duration: %3lu s", value);
 
     for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
     {
@@ -669,49 +743,29 @@ static void time_HumidifierPointsCalculate(void)
         {
             gHumidifierPoints[point].interval = interval;
             interval = 0;
-            TIME_LOGI("[%d] - Interval: %5lu s", point, gHumidifierPoints[point].interval);
+            TIME_LOGI
+            (
+                "[%d] %-23s: %10lu : %3d : %3d",
+                point,
+                gcPointDescription[point],
+                gHumidifierPoints[point].interval,
+                gHumidifierPoints[point].transition->on,
+                gHumidifierPoints[point].transition->duration
+            );
         }
     }
 }
 
 //-------------------------------------------------------------------------------------------------
 
-static void time_PointsCalculate(time_t t, struct tm * p_dt, char * p_str)
+static void time_PointsCalculate(time_t t)
 {
-    char     string[TIME_STR_MAX_LEN] = {0};
-    time_t   zero_time                = 0;
-    time_t   tz_offset                = 0;
-    time_t   current_time             = t;
-    time_t   ref_utc_time             = t;
+    time_t ref_utc_time   = t;
+    time_t start_day_time = 0;
 
-    TIME_LOGI("Current local time         : %12llu - %s", current_time, p_str);
+    time_GetTimeRefs(t, &start_day_time, &ref_utc_time);
 
-    /* Determine the time zone offset */
-    gmtime_r(&zero_time, p_dt);
-    p_dt->tm_isdst = 1;
-    tz_offset = mktime(p_dt);
-    TIME_LOGI("Time zone offset           : %10lld s", tz_offset);
-
-    localtime_r(&ref_utc_time, p_dt);
-    p_dt->tm_sec   = 0;
-    p_dt->tm_min   = 1;
-    p_dt->tm_hour  = 12;
-    p_dt->tm_isdst = 1;
-    ref_utc_time   = (mktime(p_dt) - tz_offset);
-    gmtime_r(&ref_utc_time, p_dt);
-    strftime(string, sizeof(string), "%c", p_dt);
-    TIME_LOGI("Calculation reference UTC  : %12llu - %s", ref_utc_time, string);
-
-    localtime_r(&current_time, p_dt);
-    p_dt->tm_sec   = 0;
-    p_dt->tm_min   = 0;
-    p_dt->tm_hour  = 0;
-    p_dt->tm_isdst = 1;
-    time_t start_day_time = mktime(p_dt);
-    strftime(string, sizeof(string), "%c", p_dt);
-    TIME_LOGI("Start of day time          : %12llu - %s", start_day_time, string);
-
-    time_TimePointsCalculate(start_day_time, ref_utc_time, p_dt, string);
+    time_TimePointsCalculate(start_day_time, ref_utc_time);
 
     time_RgbPointsCalculate();
 
@@ -724,7 +778,7 @@ static void time_PointsCalculate(time_t t, struct tm * p_dt, char * p_str)
 
 //-------------------------------------------------------------------------------------------------
 
-static void time_SunRgb(time_t curr_t, FW_BOOLEAN pre_tx, led_message_p p_rgb_msg)
+static void time_SunRgb(time_t t, FW_BOOLEAN pre_tx, led_message_p p_rgb_msg)
 {
     enum
     {
@@ -739,11 +793,18 @@ static void time_SunRgb(time_t curr_t, FW_BOOLEAN pre_tx, led_message_p p_rgb_ms
     for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
     {
         /* Find the appropriate time point */
-        if ((curr_t >= gTimePoints[point].start) && (NULL != gRgbPoints[point].transition))
+        if ((t >= gTimePoints[point].start) && (NULL != gRgbPoints[point].transition))
         {
             interval = (gRgbPoints[point].interval * 1000);
-            duration = ((curr_t - gTimePoints[point].start) * 1000);
-            TIME_LOGI("[%d] - Interval/Duration RGB: %12lu - %lu", point, interval, duration);
+            duration = ((t - gTimePoints[point].start) * 1000);
+            TIME_LOGI
+            (
+                "[%d] %-23s: %10lu : %8lu : RGB",
+                point,
+                gcPointDescription[point],
+                interval,
+                duration
+            );
 
             /* Prepare the indication message */
             p_rgb_msg->command         = gRgbPoints[point].transition->cmd;
@@ -768,13 +829,7 @@ static void time_SunRgb(time_t curr_t, FW_BOOLEAN pre_tx, led_message_p p_rgb_ms
 
 //-------------------------------------------------------------------------------------------------
 
-static void time_SunUw
-(
-    time_t curr_t,
-    FW_BOOLEAN pre_tx,
-    led_message_p p_u_msg,
-    led_message_p p_w_msg
-)
+static void time_SunUw(time_t t, FW_BOOLEAN pre_tx, led_message_p p_u_msg, led_message_p p_w_msg)
 {
     enum
     {
@@ -789,11 +844,20 @@ static void time_SunUw
     for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
     {
         /* Find the appropriate time point */
-        if ((curr_t >= gTimePoints[point].start) && (NULL != gUwPoints[point].transition))
+        if ((t >= gTimePoints[point].start) && (NULL != gUwPoints[point].transition))
         {
             interval = (gUwPoints[point].interval * 1000);
-            duration = ((curr_t - gTimePoints[point].start) * 1000);
-            TIME_LOGI("[%d] - Interval/Duration U/W: %12lu - %lu", point, interval, duration);
+            duration = ((t - gTimePoints[point].start) * 1000);
+            TIME_LOGI
+            (
+                "[%d] %-23s: %10lu : %8lu : U/W - %d/%d",
+                point,
+                gcPointDescription[point],
+                interval,
+                duration,
+                gUwPoints[point].transition->u_max,
+                gUwPoints[point].transition->w_max
+            );
 
             /* Prepare the indication message */
             p_u_msg->command          = gUwPoints[point].transition->u_cmd;
@@ -835,21 +899,32 @@ static void time_SunUw
 
 //-------------------------------------------------------------------------------------------------
 
-static void time_Sun(time_t t, struct tm * p_dt, char * p_str, FW_BOOLEAN pre_transition)
+#if (1 == TIME_LOG)
+static void time_LogTime(time_t t, char * p_str)
+{
+    struct tm dt                    = {0};
+    char      str[TIME_STR_MAX_LEN] = {0};
+
+    localtime_r(&t, &dt);
+    strftime(str, sizeof(str), "%c", &dt);
+    TIME_LOGI("%-26s : %10llu : %s", p_str, t, str);
+}
+#endif
+
+//-------------------------------------------------------------------------------------------------
+
+static void time_Sun(time_t t, FW_BOOLEAN pre_transition)
 {
     enum
     {
-        TRANSITION_TIMEOUT  = (pdMS_TO_TICKS(1300)),
+        TRANSITION_TIMEOUT = (pdMS_TO_TICKS(1300)),
     };
-    led_message_t rgb_msg      = {0};
-    led_message_t u_msg        = {0};
-    led_message_t w_msg        = {0};
-    time_t        current_time = t;
+    led_message_t rgb_msg = {0};
+    led_message_t u_msg   = {0};
+    led_message_t w_msg   = {0};
 
-    TIME_LOGI("Current local time         : %12llu - %s", current_time, p_str);
-
-    time_SunRgb(current_time, pre_transition, &rgb_msg);
-    time_SunUw(current_time, pre_transition, &u_msg, &w_msg);
+    time_SunRgb(t, pre_transition, &rgb_msg);
+    time_SunUw(t, pre_transition, &u_msg, &w_msg);
 
     if (FW_TRUE == pre_transition)
     {
@@ -859,17 +934,17 @@ static void time_Sun(time_t t, struct tm * p_dt, char * p_str, FW_BOOLEAN pre_tr
         }
     }
 
-    if (0 != rgb_msg.command)
+    if (LED_CMD_EMPTY != rgb_msg.command)
     {
         LED_Task_SendMsg(&rgb_msg);
     } 
     
-    if (0 != u_msg.command)
+    if (LED_CMD_EMPTY != u_msg.command)
     {
         LED_Task_SendMsg(&u_msg);
     } 
     
-    if (0 != w_msg.command)
+    if (LED_CMD_EMPTY != w_msg.command)
     {
         LED_Task_SendMsg(&w_msg);
     }
@@ -877,13 +952,12 @@ static void time_Sun(time_t t, struct tm * p_dt, char * p_str, FW_BOOLEAN pre_tr
 
 //-------------------------------------------------------------------------------------------------
 
-static void time_ClimateFan(time_t t, struct tm * p_dt, char * p_str)
+static void time_ClimateFan(time_t t, climate_message_p p_msg)
 {
-    climate_message_t msg      = {0};
-    uint8_t           count    = 0;
-    int               point    = 0;
-    uint32_t          interval = UINT32_MAX;
-    uint32_t          duration = UINT32_MAX;
+    uint8_t  count    = 0;
+    int      point    = 0;
+    uint32_t interval = UINT32_MAX;
+    uint32_t duration = UINT32_MAX;
 
     for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
     {
@@ -891,14 +965,14 @@ static void time_ClimateFan(time_t t, struct tm * p_dt, char * p_str)
         if ((t >= gTimePoints[point].start) && (NULL != gFanPoints[point].transition))
         {
             /* Prepare the FAN message */
-            msg.command = gFanPoints[point].transition->cmd;
-            msg.speed   = gFanPoints[point].transition->speed;
-            msg.repeat  = gFanPoints[point].transition->repeat;
+            p_msg->command = gFanPoints[point].transition->cmd;
+            p_msg->speed   = gFanPoints[point].transition->speed;
+            p_msg->repeat  = gFanPoints[point].transition->repeat;
 
             if (FAN_SPEED_NONE < gFanPoints[point].transition->speed)
             {
                 /* The remaining time to the next time point */
-                interval = (gTimePoints[point].start + gTimePoints[point].interval - t);
+                interval = (gTimePoints[point].start + gFanPoints[point].interval - t);
                 /* Determine the count of remaining time slots */
                 count = (interval / TIME_FAN_SLOT_DURATION_S);
                 if (0 < count)
@@ -908,23 +982,23 @@ static void time_ClimateFan(time_t t, struct tm * p_dt, char * p_str)
                     /* Determine the FAN time duration */
                     duration = ((gFanPoints[point].transition->percent * interval) / 100);
                     /* Setup the message */
-                    msg.interval = interval;
-                    msg.duration = duration;
+                    p_msg->interval = interval;
+                    p_msg->duration = duration;
                 }
                 else
                 {
-                    msg.speed = FAN_SPEED_NONE;
+                    p_msg->speed = FAN_SPEED_NONE;
                 }
             }
             TIME_LOGI
             (
-                "[%d] - Interval/Duration FAN: %12lu - %lu - S: %d",
+                "[%d] %-23s: %10lu : %8lu : FAN - S: %d",
                 point,
-                msg.interval,
-                msg.duration,
-                msg.speed
+                gcPointDescription[point],
+                p_msg->interval,
+                p_msg->duration,
+                p_msg->speed
             );
-            Climate_Task_SendMsg(&msg);
             /* Skip the rest of time points */
             break;
         }
@@ -933,31 +1007,42 @@ static void time_ClimateFan(time_t t, struct tm * p_dt, char * p_str)
 
 //-------------------------------------------------------------------------------------------------
 
-static void time_ClimateHumidifier(time_t t, struct tm * p_dt, char * p_str)
+static void time_ClimateHumidifier(time_t t, climate_message_p p_msg)
 {
-    climate_message_t msg      = {0};
-    int               point    = 0;
+    enum
+    {
+        HUMIDIFICATION_TIMEOUT_S = (8 * 60),
+    };
+    uint32_t interval = UINT32_MAX;
+    int      point    = 0;
 
     for (point = (TIME_IDX_MAX - 1); point >= 0; point--)
     {
         /* Find the appropriate time point */
         if ((t >= gTimePoints[point].start) && (NULL != gHumidifierPoints[point].transition))
         {
+            /* The remaining time to the next time point */
+            interval = (gTimePoints[point].start + gHumidifierPoints[point].interval - t);
             /* Prepare the Humidifier message */
-            msg.command  = gHumidifierPoints[point].transition->cmd;
-            msg.on       = gHumidifierPoints[point].transition->on;
-            msg.repeat   = gHumidifierPoints[point].transition->repeat;
-            msg.interval = (gTimePoints[point].interval * 1000);
-            msg.duration = (gHumidifierPoints[point].transition->duration * 1000);
+            p_msg->command = gHumidifierPoints[point].transition->cmd;
+            /* There should be at least a few minutes after the humidification */
+            if ((true == gHumidifierPoints[point].transition->on) &&
+                (HUMIDIFICATION_TIMEOUT_S < interval))
+            {
+                p_msg->on       = gHumidifierPoints[point].transition->on;
+                p_msg->repeat   = gHumidifierPoints[point].transition->repeat;
+                p_msg->interval = (gHumidifierPoints[point].interval * 1000);
+                p_msg->duration = (gHumidifierPoints[point].transition->duration * 1000);
+            }
             TIME_LOGI
             (
-                "[%d] - Interval/Duration HUM: %12lu - %lu - On: %d",
+                "[%d] %-23s: %10lu : %8lu : HUM - On: %d",
                 point,
-                msg.interval,
-                msg.duration,
-                msg.on
+                gcPointDescription[point],
+                p_msg->interval,
+                p_msg->duration,
+                p_msg->on
             );
-            Climate_Task_SendMsg(&msg);
             /* Skip the rest of time points */
             break;
         }
@@ -966,58 +1051,67 @@ static void time_ClimateHumidifier(time_t t, struct tm * p_dt, char * p_str)
 
 //-------------------------------------------------------------------------------------------------
 
-static void time_Climate(time_t t, struct tm * p_dt, char * p_str)
+static void time_Climate(time_t t)
 {
-    time_ClimateFan(t, p_dt, p_str);
-    time_ClimateHumidifier(t, p_dt, p_str);
+    climate_message_t humidifier_msg = {0};
+    climate_message_t fan_msg        = {0};
+
+    time_ClimateFan(t, &fan_msg);
+    time_ClimateHumidifier(t, &humidifier_msg);
+
+    if (CLIMATE_CMD_EMPTY != fan_msg.command)
+    {
+        Climate_Task_SendMsg(&fan_msg);
+    }
+    if (CLIMATE_CMD_EMPTY != humidifier_msg.command)
+    {
+        Climate_Task_SendMsg(&humidifier_msg);
+    }
 }
 
 //-------------------------------------------------------------------------------------------------
 
-static void time_SetAlarm(time_t t, struct tm * p_dt, char * p_str)
+static void time_SetAlarm(time_t t)
 {
-    char    string[TIME_STR_MAX_LEN] = {0};
-    time_t  current_time             = t;
-    int32_t point                    = 0;
+    int32_t point = 0;
 
     for (point = 0; point < TIME_IDX_MAX; point++)
     {
-        if (current_time < gTimePoints[point].start)
+        if (t < gTimePoints[point].start)
         {
             gAlarm = gTimePoints[point].start;
-            localtime_r(&gAlarm, p_dt);
-            strftime(string, sizeof(string), "%c", p_dt);
-            TIME_LOGI("Alarm set to next time     : %12llu - %s", gAlarm, string);
+            TIME_LOGT(gAlarm, "Alarm set to next time");
             break;
         }
     }
     if (TIME_IDX_MAX == point)
     {
         gAlarm = LONG_MAX;
-        TIME_LOGI("Alarm cleared              : %12llu - %s", t, p_str);
+        TIME_LOGT(t, "Alarm cleared");
     }
 }
 
 //-------------------------------------------------------------------------------------------------
 
-static void time_ProcessMsg(time_message_t * p_msg, time_t t, struct tm * p_dt, char * p_str)
+static void time_ProcessMsg(time_message_t * p_msg, time_t t)
 {
     gCommand = p_msg->command;
 
     if (TIME_CMD_SUN_ENABLE == gCommand)
     {
-        time_PointsCalculate(t, p_dt, p_str);
-        time_SetAlarm(t, p_dt, p_str);
-        time_Sun(t, p_dt, p_str, FW_TRUE);
-        time_Climate(t, p_dt, p_str);
+        time_PointsCalculate(t);
+        time_SetAlarm(t);
+        TIME_LOGT(t, "Current local time");
+        time_Sun(t, FW_TRUE);
+        time_Climate(t);
     }
 }
 
 //-------------------------------------------------------------------------------------------------
 
-static void time_CheckForAlarms(time_t t, struct tm * p_dt, char * p_str)
+static void time_CheckForAlarms(time_t t)
 {
-    time_t current_time = t;
+    struct tm dt = {0};
 
     if (TIME_CMD_SUN_ENABLE == gCommand)
     {
@@ -1025,35 +1119,27 @@ static void time_CheckForAlarms(time_t t, struct tm * p_dt, char * p_str)
         if (LONG_MAX == gAlarm)
         {
             /* Check for midnight */
-            localtime_r(&current_time, p_dt);
-            if ((0 == p_dt->tm_hour) && (0 == p_dt->tm_min) && (0 <= p_dt->tm_sec))
+            localtime_r(&t, &dt);
+            if ((0 == dt.tm_hour) && (0 == dt.tm_min) && (0 <= dt.tm_sec))
             {
-                TIME_LOGI
-                (
-                    "Midnight detected!         : %12llu - %s",
-                    current_time,
-                    p_str
-                );
-                time_PointsCalculate(t, p_dt, p_str);
-                time_SetAlarm(t, p_dt, p_str);
-                time_Sun(t, p_dt, p_str, FW_TRUE);
-                time_Climate(t, p_dt, p_str);
+                TIME_LOGT(t, "Midnight detected!");
+                time_PointsCalculate(t);
+                time_SetAlarm(t);
+                TIME_LOGT(t, "Current local time");
+                time_Sun(t, FW_TRUE);
+                time_Climate(t);
             }
         }
         else
         {
             /* Check for alarm */
-            if (current_time >= gAlarm)
+            if (t >= gAlarm)
             {
-                TIME_LOGI
-                (
-                    "Alarm detected!            : %12llu - %s",
-                    current_time,
-                    p_str
-                );
-                time_SetAlarm(t, p_dt, p_str);
-                time_Sun(t, p_dt, p_str, FW_TRUE);
-                time_Climate(t, p_dt, p_str);
+                TIME_LOGT(t, "Alarm detected!");
+                time_SetAlarm(t);
+                TIME_LOGT(t, "Current local time");
+                time_Sun(t, FW_TRUE);
+                time_Climate(t);
             }
         }
     }
@@ -1067,13 +1153,12 @@ static void vTime_Task(void * pvParameters)
     {
         RETRY_COUNT = 20,
     };
-    BaseType_t     status                   = pdFAIL;
-    time_message_t msg                      = {0};
-    time_t         now                      = 0;
-    struct tm      datetime                 = {0};
-    char           string[TIME_STR_MAX_LEN] = {0};
-    uint32_t       retry                    = 0;
-    static uint8_t sync_ok                  = FW_FALSE;
+    BaseType_t     status   = pdFAIL;
+    time_message_t msg      = {0};
+    time_t         now      = 0;
+    struct tm      datetime = {0};
+    uint32_t       retry    = 0;
+    static uint8_t sync_ok  = FW_FALSE;
 
     /* Initialize the SNTP client which gets the time periodicaly */
     TIME_LOGI("Time Task Started...");
@@ -1096,20 +1181,18 @@ static void vTime_Task(void * pvParameters)
         /* If time is already in sync with the server */
         if ((2024 - 1900) <= datetime.tm_year)
         {
-            strftime(string, sizeof(string), "%c", &datetime);
-
             if (FW_FALSE == sync_ok)
             {
+                TIME_LOGT(now, "Sync OK!");
                 sync_ok = FW_TRUE;
-                TIME_LOGI("Sync OK: Now - %llu - %s", now, string);
             }
 
             status = xQueueReceive(gTimeQueue, (void *)&msg, TIME_TASK_TICK_MS);
             if (pdTRUE == status)
             {
-                time_ProcessMsg(&msg, now, &datetime, string);
+                time_ProcessMsg(&msg, now);
             }
-            time_CheckForAlarms(now, &datetime, string);
+            time_CheckForAlarms(now);
         }
         else
         {
@@ -1159,7 +1242,7 @@ FW_BOOLEAN Time_Task_IsInSunImitationMode(void)
 //--- Tests ---------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------
 
-static void time_Test_Calculations(void)
+static void time_Test_Time_Calculations(void)
 {
     typedef struct
     {
@@ -1215,18 +1298,18 @@ static void time_Test_Calculations(void)
         .trans_duration = 241,
     };
 
-    char                   string[28]      = {0};
-    struct tm              dt              = {0};
-    time_t                 zero_time       = 0;
-    time_t                 tz_offset       = 0;
-    time_t                 current_time    = sun.current.time;
-    time_t                 ref_utc_time    = sun.current.time;
-    uint32_t               test            = 0;
-    uint32_t               offset_sec      = 0;
-    uint32_t               offset_min      = 0;
-    time_t                 calculated_time = 0;
-    transition_s_t const * p_trans         = NULL;
-    int                    trans_index     = sun.count;
+    char                   string[TIME_STR_MAX_LEN] = {0};
+    struct tm              dt                       = {0};
+    time_t                 zero_time                = 0;
+    time_t                 tz_offset                = 0;
+    time_t                 current_time             = sun.current.time;
+    time_t                 ref_utc_time             = sun.current.time;
+    uint32_t               test                     = 0;
+    uint32_t               offset_sec               = 0;
+    uint32_t               offset_min               = 0;
+    time_t                 calculated_time          = 0;
+    transition_s_t const * p_trans                  = NULL;
+    int                    trans_index              = sun.count;
 
     /* Set the time zone */
     setenv("TZ", gTZ, 1);
@@ -1314,13 +1397,13 @@ static void time_Test_Calculations(void)
 
 static void time_Test_Alarm(void)
 {
-    time_t         now        = 0;
-    struct tm      datetime   = {0};
-    char           string[28] = {0};
-    time_t         zero_time  = 0;
-    time_t         tz_offset  = 0;
-    led_message_t  led_msg    = {0};
-    struct timeval tv         = {0};
+    time_t         now                      = 0;
+    struct tm      datetime                 = {0};
+    char           string[TIME_STR_MAX_LEN] = {0};
+    time_t         zero_time                = 0;
+    time_t         tz_offset                = 0;
+    led_message_t  led_msg                  = {0};
+    struct timeval tv                       = {0};
 
     /* Set the timezone */
     TIME_LOGI("Set timezone to - %s", gTZ);
@@ -1329,9 +1412,10 @@ static void time_Test_Alarm(void)
 
     /* Determine the time zone offset */
     gmtime_r(&zero_time, &datetime);
-    datetime.tm_isdst = 1;
+    datetime.tm_isdst = -1;
     tz_offset = mktime(&datetime);
-    TIME_LOGI("Time zone offset           : %10lld s", tz_offset);
+    TIME_LOGI("Time zone offset           : %10lld", tz_offset);
+    (void)tz_offset;
 
     /* Determine the date/time before midnight */
     datetime.tm_sec   = 46;
@@ -1345,7 +1429,7 @@ static void time_Test_Alarm(void)
     datetime.tm_isdst = 1;
     now = mktime(&datetime);
     strftime(string, sizeof(string), "%c", &datetime);
-    TIME_LOGI("Test time                  : %12lld - %s", now, string);
+    TIME_LOGI("Test time                  : %10lld : %s", now, string);
 
     /* Transition to DST color for 1100 ms */
     led_msg.command         = LED_CMD_RGB_INDICATE_COLOR;
@@ -1592,11 +1676,229 @@ static void time_Test_DayNight(void)
 
 //-------------------------------------------------------------------------------------------------
 
+#define GT(yr,mn,dy,hr,mi,sc,t,o) \
+do \
+{ \
+    char str[TIME_STR_MAX_LEN] = {0}; \
+    struct tm dt = {0}; \
+    struct tm tz = {0}; \
+    time_t ztime = 0; \
+    dt.tm_sec = sc; \
+    dt.tm_min = mi; \
+    dt.tm_hour = hr; \
+    dt.tm_mday = dy; \
+    dt.tm_mon = (mn - 1); \
+    dt.tm_year = (yr - 1900); \
+    dt.tm_wday = 0; \
+    dt.tm_yday = 0; \
+    dt.tm_isdst = -1; \
+    t = mktime(&dt); \
+    strftime(str, sizeof(str), "%c", &dt); \
+    TIME_LOGI("DST (Daylight Saving Time) : %10d", dt.tm_isdst); \
+    TIME_LOGI("%-26s : %10lld : %s", "Test time", t, str); \
+    gmtime_r(&ztime, &tz); \
+    tz.tm_isdst = dt.tm_isdst; \
+    o = mktime(&tz); \
+    TIME_LOGI("%-26s : %10lld", "Time zone offset", o); \
+} \
+while (0)
+
+#define CHECK_TZ(x,v) \
+do \
+{ \
+    if (v != x) \
+    { \
+        TIME_LOGE("%-26s : %10d", "FAIL! Must be", v); \
+    } \
+} \
+while (0)
+
+#define CHECK_RGB(x,i,d) \
+do \
+{ \
+    if (i != x.interval) \
+    { \
+        TIME_LOGE("%-26s : %10d", "FAIL! Interval must be", i); \
+    } \
+    if (d != x.duration) \
+    { \
+        TIME_LOGE("%-26s : %10d", "FAIL! Duration must be", d); \
+    } \
+} \
+while (0)
+
+#define CHECK_UW(x,i,d,b) \
+do \
+{ \
+    if (i != x.interval) \
+    { \
+        TIME_LOGE("%-26s : %10d", "FAIL! Interval must be", i); \
+    } \
+    if (d != x.duration) \
+    { \
+        TIME_LOGE("%-26s : %10d", "FAIL! Duration must be", d); \
+    } \
+    if (b != x.dst.brightness.v) \
+    { \
+        TIME_LOGE("%-26s : %10d", "FAIL! Brightness must be", b); \
+    } \
+} \
+while (0)
+
+#define CHECK_FAN(x,i,d,s) \
+do \
+{ \
+    if (i != x.interval) \
+    { \
+        TIME_LOGE("%-26s : %10d", "FAIL! Interval must be", i); \
+    } \
+    if (d != x.duration) \
+    { \
+        TIME_LOGE("%-26s : %10d", "FAIL! Duration must be", d); \
+    } \
+    if (s != x.speed) \
+    { \
+        TIME_LOGE("%-26s : %10d", "FAIL! Speed must be", s); \
+    } \
+} \
+while (0)
+
+#define CHECK_HUM(x,i,d,o) \
+do \
+{ \
+    if (i != x.interval) \
+    { \
+        TIME_LOGE("%-26s : %10d", "FAIL! Interval must be", i); \
+    } \
+    if (d != x.duration) \
+    { \
+        TIME_LOGE("%-26s : %10d", "FAIL! Duration must be", d); \
+    } \
+    if (o != x.on) \
+    { \
+        TIME_LOGE("%-26s : %10d", "FAIL! \"On\" must be", o); \
+    } \
+} \
+while (0)
+
+static void time_Test_Point_Calculations(void)
+{
+    typedef struct
+    {
+        led_message_t     rgb;
+        led_message_t     u;
+        led_message_t     w;
+        climate_message_t fan;
+        climate_message_t hum;
+    } test_msgs_t;
+
+    test_msgs_t msgs      = {0};
+    time_t      now       = 0;
+    time_t      tz_offset = 0;
+
+    /* Set the timezone */
+    TIME_LOGI("%-26s : %s", "Set timezone to", gTZ);
+    setenv("TZ", gTZ, 1);
+    tzset();
+
+    TIME_LOGI("---------------------------------------------------------");
+    /* Determine the date/time - Sep 30 12:13:58 2024 */
+    GT(2024, 9, 30, 12, 13, 58, now, tz_offset);
+    CHECK_TZ(tz_offset, -10800);
+
+    TIME_LOGI("---------------------------------------------------------");
+    /* Determine the date/time - Nov 30 12:13:58 2024 */
+    GT(2024, 11, 30, 12, 13, 58, now, tz_offset);
+    CHECK_TZ(tz_offset, -7200);
+
+    time_PointsCalculate(now);
+
+    TIME_LOGI("---------------------------------------------------------");
+    /* Nov 30 12:13:58 2024 - Noon */
+    GT(2024, 11, 30, 12, 13, 58, now, tz_offset);
+    TIME_LOGI("-------------------------- : - Interval : Duration : Info");
+    memset(&msgs, 0, sizeof(msgs));
+
+    time_SunRgb(now, FW_FALSE, &msgs.rgb);
+    CHECK_RGB(msgs.rgb, 23895000, 11947000);
+
+    time_SunUw(now, FW_FALSE, &msgs.u, &msgs.w);
+    CHECK_UW(msgs.u, 23895000, 11947000, 31);
+    CHECK_UW(msgs.w, 23895000, 11947000, 173);
+
+    time_ClimateFan(now, &msgs.fan);
+    CHECK_FAN(msgs.fan, 2449000, 367350, FAN_SPEED_MEDIUM);
+
+    time_ClimateHumidifier(now, &msgs.hum);
+    CHECK_HUM(msgs.hum, 0, 0, 0);
+
+
+    TIME_LOGI("---------------------------------------------------------");
+    /* Nov 30 15:30:06 2024 - Just before the Evening Golden Hour*/
+    GT(2024, 11, 30, 15, 30, 06, now, tz_offset);
+    TIME_LOGI("-------------------------- : - Interval : Duration : Info");
+    memset(&msgs, 0, sizeof(msgs));
+
+    time_SunRgb(now, FW_FALSE, &msgs.rgb);
+    CHECK_RGB(msgs.rgb, 23895000, 23715000);
+
+    time_SunUw(now, FW_FALSE, &msgs.u, &msgs.w);
+    CHECK_UW(msgs.u, 23895000, 23715000, 31);
+    CHECK_UW(msgs.w, 23895000, 23715000, 173);
+
+    time_ClimateFan(now, &msgs.fan);
+    CHECK_FAN(msgs.fan, 0, 0, FAN_SPEED_NONE);
+
+    time_ClimateHumidifier(now, &msgs.hum);
+    CHECK_HUM(msgs.hum, 0, 0, 0);
+
+    TIME_LOGI("---------------------------------------------------------");
+    /* Nov 30 07:36:56 2024 - Just before Sun rise */
+    GT(2024, 11, 30, 7, 36, 56, now, tz_offset);
+    TIME_LOGI("-------------------------- : - Interval : Duration : Info");
+    memset(&msgs, 0, sizeof(msgs));
+
+    time_SunRgb(now, FW_FALSE, &msgs.rgb);
+    CHECK_RGB(msgs.rgb, 844000, 833000);
+
+    time_SunUw(now, FW_FALSE, &msgs.u, &msgs.w);
+    CHECK_UW(msgs.u, 32091000, 27416000, 0);
+    CHECK_UW(msgs.w, 32091000, 27416000, 0);
+
+    time_ClimateFan(now, &msgs.fan);
+    CHECK_FAN(msgs.fan, 0, 0, FAN_SPEED_NONE);
+
+    time_ClimateHumidifier(now, &msgs.hum);
+    CHECK_HUM(msgs.hum, 0, 0, 0);
+
+    TIME_LOGI("---------------------------------------------------------");
+    /* Nov 30 07:28:56 2024 - Enough for humidification */
+    GT(2024, 11, 30, 7, 28, 56, now, tz_offset);
+    TIME_LOGI("-------------------------- : - Interval : Duration : Info");
+    memset(&msgs, 0, sizeof(msgs));
+
+    time_SunRgb(now, FW_FALSE, &msgs.rgb);
+    CHECK_RGB(msgs.rgb, 844000, 353000);
+
+    time_SunUw(now, FW_FALSE, &msgs.u, &msgs.w);
+    CHECK_UW(msgs.u, 32091000, 26936000, 0);
+    CHECK_UW(msgs.w, 32091000, 26936000, 0);
+
+    time_ClimateFan(now, &msgs.fan);
+    CHECK_FAN(msgs.fan, 0, 0, FAN_SPEED_NONE);
+
+    time_ClimateHumidifier(now, &msgs.hum);
+    CHECK_HUM(msgs.hum, 844000, 25000, 1);
+}
+
+//-------------------------------------------------------------------------------------------------
+
 void Time_Task_Test(void)
 {
-    time_Test_Calculations();
+    time_Test_Time_Calculations();
     time_Test_Alarm();
     time_Test_DayNight();
+    time_Test_Point_Calculations();
 }
 
 //-------------------------------------------------------------------------------------------------
