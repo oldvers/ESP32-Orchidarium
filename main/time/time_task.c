@@ -870,9 +870,9 @@ static void time_SunUw(time_t t, FW_BOOLEAN pre_tx, led_message_p p_u_msg, led_m
 
             p_w_msg->command          = gUwPoints[point].transition->w_cmd;
             p_w_msg->src.brightness.v = 0;
-            p_u_msg->src.brightness.a = 1;
+            p_w_msg->src.brightness.a = 1;
             p_w_msg->dst.brightness.v = gUwPoints[point].transition->w_max;
-            p_u_msg->dst.brightness.a = 1;
+            p_w_msg->dst.brightness.a = 1;
             p_w_msg->interval         = interval;
             p_w_msg->duration         = duration;
 

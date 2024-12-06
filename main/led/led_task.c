@@ -1083,8 +1083,8 @@ void LED_Task_SendMsg(led_message_p p_msg)
     (
         "Msg->C:%d-S(%d.%d.%d.%d)-D(%d.%d.%d.%d)-I:%d",
         p_msg->command,
-        p_msg->src_color.r, p_msg->src_color.g, p_msg->src_color.b, p_msg->src_color.a,
-        p_msg->dst_color.r, p_msg->dst_color.g, p_msg->dst_color.b, p_msg->dst_color.a,
+        p_msg->src.color.r, p_msg->src.color.g, p_msg->src.color.b, p_msg->src.color.a,
+        p_msg->dst.color.r, p_msg->dst.color.g, p_msg->dst.color.b, p_msg->dst.color.a,
         (int)p_msg->interval
     );
 
@@ -1641,6 +1641,18 @@ static void uwf_Test_Sine(void)
     led_msg.command          = LED_CMD_F_INDICATE_SINE;
     LED_Task_SendMsg(&led_msg);
     vTaskDelay(pdMS_TO_TICKS(4000));
+
+    /* Transition to DST W brightness about 5000 ms */
+    memset(&led_msg, 0, sizeof(led_msg));
+    led_msg.command     = LED_CMD_W_INDICATE_SINE;
+    led_msg.dst.brightness.v = 100;
+    led_msg.dst.brightness.a = 1;
+    led_msg.src.brightness.v = 0;
+    led_msg.src.brightness.a = 1;
+    led_msg.interval         = 10000;
+    led_msg.duration         = 0;
+    LED_Task_SendMsg(&led_msg);
+    vTaskDelay(pdMS_TO_TICKS(5000));
 
     /* Transition to DST W brightness about 5000 ms */
     memset(&led_msg, 0, sizeof(led_msg));
